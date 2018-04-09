@@ -1,0 +1,4 @@
+*.user
+*.autosave
+# Omit the client IDs from git
+clientid.h
