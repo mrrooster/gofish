@@ -5,6 +5,7 @@
 #include <QJsonValue>
 #include <iostream>
 #include "googlenetworkaccessmanager.h"
+#include "goauth2authorizationcodeflow.h"
 
 #define DEBUG_GOOGLEDRIVE
 #ifdef DEBUG_GOOGLEDRIVE
@@ -45,7 +46,7 @@ GoogleDrive::GoogleDrive(const QString clientId, const QString clientSecret, QOb
         }
     });
 
-    this->auth    = new QOAuth2AuthorizationCodeFlow(new GoogleNetworkAccessManager(this), this);
+    this->auth    = new GOAuth2AuthorizationCodeFlow(new GoogleNetworkAccessManager(this), this);
     auto *handler = new QOAuthHttpServerReplyHandler(this);
     this->auth->setReplyHandler(handler);
     this->auth->setAuthorizationUrl(auth_url);
@@ -58,10 +59,9 @@ GoogleDrive::GoogleDrive(const QString clientId, const QString clientSecret, QOb
 
     // Handle a refreshed token....
     connect(handler,&QOAuthHttpServerReplyHandler::tokensReceived,[=](QVariantMap tokens){
-        if (this->auth->token().isEmpty()) {
-            this->auth->setToken(tokens.value("access_token").toString());
-            setState(Connected);
-        }
+        this->auth->setToken(tokens.value("access_token").toString());
+        setState(Connected);
+        this->auth->resetStatus(QAbstractOAuth::Status::Granted);
     });
 
     // Rewriting the refresh token request for google
@@ -73,23 +73,20 @@ GoogleDrive::GoogleDrive(const QString clientId, const QString clientSecret, QOb
         }
     });
 
-    connect(this->auth, &QOAuth2AuthorizationCodeFlow::statusChanged, [=](
+    connect(this->auth, &QAbstractOAuth::statusChanged, [=](
             QAbstractOAuth::Status status) {
-	D("auth state changed:"<<(int)status);
-        if (status==QAbstractOAuth::Status::Granted){
+
+        if (status==QAbstractOAuth::Status::Granted) {
            D( "Authorised. Starting token refresh timer.");
            D( "Token expires at:" <<this->auth->expirationAt().toString());
 
-           quint64 msecs = QDateTime::currentDateTime().msecsTo(this->auth->expirationAt());
+           quint64 msecs = 120000;
 
-           if(msecs>5000) {
-               msecs-=5000;
-           }
            this->refreshTokenTimer.start(msecs);
 
            setRefreshToken(this->auth->refreshToken());
            setState(Connected);
-           emit stateChanged(this->state);
+           //emit stateChanged(this->state);
         }
     });
 
@@ -97,14 +94,14 @@ GoogleDrive::GoogleDrive(const QString clientId, const QString clientSecret, QOb
         qInfo() << "Go to: "<<url.toString();
     });
 
+    this->refreshTokenTimer.setSingleShot(true);
+
     QString refreshToken = getRefreshToken();
     if (refreshToken.isEmpty()) {
         this->auth->grant();
     } else {
         this->auth->setRefreshToken(refreshToken);
         this->auth->refreshAccessToken();
-	D("Setting token to refresh every 120 seconds...");
-	this->refreshTokenTimer.start(120000);
     }
 }
 
@@ -138,6 +135,26 @@ void GoogleDrive::readRemoteFolder(QString path)
     this->preflightPaths.removeOne(path);
     D("read remote folder.. locked."<<path);
     readFolder(path,path,"","");
+}
+
+void GoogleDrive::readRemoteFolder(QString path, QString parentId)
+{
+    D("read remote folder."<<path);
+    if (this->inflightPaths.contains(path)) {
+        D("Another request in progress.");
+        return;
+    }
+    if (this->inflightValues.contains(path)) {
+        this->inflightValues.value(path)->clear();
+    } else {
+        this->inflightValues.insert(path,new QVector<QJsonValue>());
+    }
+    getBlockingLock(path)->lock();
+    this->inflightPaths.append(path);
+    D("Removing path from preflight: "<<path);
+    this->preflightPaths.removeOne(path);
+    D("read remote folder.. locked."<<path);
+    readFolder(path,"",parentId);
 }
 
 QMutex *GoogleDrive::getBlockingLock(QString folder)
@@ -202,6 +219,58 @@ void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)
     //readFolder(path,path,"","");
     readFileSection(fileId,start,length);
     return;
+}
+
+void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId)
+{
+    D("readFolder: startPath:"<<startPath<<", parentId: "<<parentId<<", Next page token:"<<nextPageToken);
+    QUrl url = files_list;
+
+//    QString query = (dir.isEmpty())?
+    QString queryString = QString("'%1' in parents").arg(parentId);
+    if (startPath=="/") {
+        queryString = "('root' in parents or sharedWithMe = true)";
+    }
+
+    QString query = QString("q=%1").arg(QString(QUrl::toPercentEncoding(queryString," '")).replace(" ","+"));
+    if (!nextPageToken.isEmpty()) {
+        query += QString("&pageToken=%1").arg(QString(QUrl::toPercentEncoding(nextPageToken," '")).replace(" ","+"));
+    }
+    query += "&fields=files(name,size,mimeType,id,kind,createdTime,modifiedTime)";
+    url.setQuery(query);
+    queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QNetworkReply *response){
+        QByteArray responseData = response->readAll();
+        //D("Read file response data:"<<responseData);
+        QJsonDocument doc = QJsonDocument::fromJson(responseData);
+        //D("Got response:"<<doc);
+
+        if (doc.isObject()) {
+            if (doc["files"].isArray()) {
+                auto files = doc["files"].toArray();
+
+                for(int idx=0;idx<files.size();idx++) {
+                    const QJsonValue file = files[idx];
+                    this->inflightValues.value(startPath)->append(file);
+                }
+                if (!doc["nextPageToken"].isString()) {
+                    emit folderContents(startPath,*this->inflightValues.value(startPath));
+                    this->inflightPaths.removeOne(startPath);
+                    D("Releasing lock (drive)"<<startPath);
+                    getBlockingLock(startPath)->unlock();
+                    delete this->inflightValues.take(startPath);
+                    return;
+                } else {
+                    emit folderContents(startPath,QVector<QJsonValue>());
+                }
+            }
+            if (doc["nextPageToken"].isString()) {
+                D("Has next page! :"<<doc["nextPageToken"].toString());
+                this->readFolder(startPath,doc["nextPageToken"].toString(),parentId);
+            } else {
+                emit folderContents(startPath,QVector<QJsonValue>());
+            }
+        }
+    });
 }
 
 void GoogleDrive::readFolder(QString startPath, QString path, QString nextPageToken, QString currentFolderId)

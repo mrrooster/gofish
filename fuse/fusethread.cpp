@@ -26,7 +26,7 @@ FuseThread::FuseThread(int argc, char *argv[],GoogleDrive *gofish, QObject *pare
 void FuseThread::run()
 {
     D("In fuse thread...");
-    this->root  = new GoogleDriveObject(this->gofish);
+    this->root  = GoogleDriveObject(this->gofish);
 
     struct fuse_operations *fuse_ops = new fuse_operations();
 
@@ -55,32 +55,31 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
     QString pathString(path);
     D("In getattr"<<path);
 
-    GoogleDriveObject *item = getObjectForPath(path);
+    GoogleDriveObject item = getObjectForPath(path);
 
-    if (!item) {
+    if (!item.isValid()) {
         return -ENOENT;
     }
 
-//    this->gofish->getFileMetadata(path);
     ::memset(stbuf,0,sizeof(struct stat));
 
     stbuf->st_mode = 0666;
     stbuf->st_mode= 0555;
-    if (item->isFolder()) {
+    if (item.isFolder()) {
         D("Thingy is dir.");
         stbuf->st_mode |= S_IFDIR;
         stbuf->st_size = 512;
-        stbuf->st_nlink = 2 + item->getChildFolderCount();
+        stbuf->st_nlink = 2 + item.getChildFolderCount();
     } else {
         D("Thingy is regular file.");
         stbuf->st_mode |= S_IFREG;
-        stbuf->st_size = item->getSize();
+        stbuf->st_size = item.getSize();
         stbuf->st_nlink = 1;
     }
     stbuf->st_rdev = S_IFCHR;
-    stbuf->st_ctime= item->getCreatedTime().toTime_t();
-    stbuf->st_mtime= item->getCreatedTime().toTime_t();
-    stbuf->st_ino  = reinterpret_cast<quint64>(item);
+    stbuf->st_ctime= item.getCreatedTime().toTime_t();
+    stbuf->st_mtime= item.getCreatedTime().toTime_t();
+    stbuf->st_ino  = item.getInode();
     /*
     if (this->paths.contains(path)) {
         QJsonDocument doc = this->paths.value(path);
@@ -109,15 +108,15 @@ int FuseThread::openDir(const char *path, struct fuse_file_info *fi)
 int FuseThread::readDir(const char *path, void *buf,fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
 {
     D("In readDir... "<<path);
-    GoogleDriveObject *object = getObjectForPath(path);
-    if (!object) {
+    GoogleDriveObject object = getObjectForPath(path);
+    if (!object.isValid()) {
         D("reddir - Did not get object for path:"<<path);
         return -ENOENT;
     }
 
-    QVector<GoogleDriveObject*> children = object->getChildren();
+    QVector<GoogleDriveObject> children = object.getChildren();
     for(int idx=0;idx<children.size();idx++) {
-        if(filler(buf,children.at(idx)->getName().toUtf8().constData(),0,0)) {
+        if(filler(buf,children.at(idx).getName().toUtf8().constData(),0,0)) {
             return -ENOMEM;
         }
     }
@@ -134,28 +133,27 @@ int FuseThread::closeDir(const char *path, struct fuse_file_info *fi)
 int FuseThread::open(const char *path, struct fuse_file_info *fi)
 {
     D("In open"<<path);
-    fi->fh = reinterpret_cast<uint64_t>(getObjectForPath(path));
-    return (fi->fh==0)?-1:0;
+    return getObjectForPath(path).isValid();
 }
 
 int FuseThread::read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi)
 {
     D("In read"<<path<<", offset:"<<offset<<", size:"<<size);
 
-    GoogleDriveObject *item = reinterpret_cast<GoogleDriveObject*>(fi->fh);
+    GoogleDriveObject item = getObjectForPath(path);
 
-    quint64 blockSize = item->getBlockSize();
+    quint64 blockSize = item.getBlockSize();
     quint64 start = offset;
     quint64 readCount = 0;
     char *ptr=buf;
     quint64 chunkStart = (start/blockSize) * blockSize;
 
-    if (item) {
+    if (item.isValid()) {
         while (size>0) {
             D("Start: "<<start<<", chunkstart: "<<chunkStart<<", size: "<<size);
 
             // read a chunk
-            QByteArray data = item->read(chunkStart,blockSize);
+            QByteArray data = item.read(chunkStart,blockSize);
 
             Q_ASSERT(!data.isEmpty());
 
@@ -180,29 +178,20 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset,stru
         }
     }
 
-//    QByteArray data = item->read(offset,size);
-
-//    int copySize = size;
-//    if (data.size()<copySize) {
-//        copySize = data.size();
-//    }
-
-//    ::memcpy(data.data(),buf,copySize);
-
     D("Returning: "<<readCount);
 
     return readCount;
 }
 
-GoogleDriveObject *FuseThread::getObjectForPath(QString path)
+GoogleDriveObject FuseThread::getObjectForPath(QString path)
 {
     D("Get object for path: "<<path);
 
-    GoogleDriveObject *ret = this->root;
+    GoogleDriveObject &ret = this->root;
 
     path = path.mid(1); // Strip off the initial slash
 
-    while(!path.isEmpty() && ret!=nullptr) {
+    while(!path.isEmpty() && ret.isValid()) {
         QString item = path.left(path.indexOf('/'));
         if (path.contains('/')) {
             path = path.mid(path.indexOf('/')+1);
@@ -210,12 +199,13 @@ GoogleDriveObject *FuseThread::getObjectForPath(QString path)
             path = "";
         }
 
-        QVector<GoogleDriveObject*> children = ret->getChildren();
+        QVector<GoogleDriveObject> children = ret.getChildren();
+        D("Got "<<children.size()<<"children");
 
-        GoogleDriveObject *childItem = nullptr;
+        GoogleDriveObject childItem;
         for(int idx=0;idx<children.size();idx++) {
-//            D("Checking:"<<children.at(idx)->getName()<<idx);
-            if (children.at(idx)->getName()==item) {
+//            D("Checking:"<<children.at(idx).getName()<<idx);
+            if (children.at(idx).getName()==item) {
 //                D("Found!");
                 childItem = children.at(idx);
                 break;
@@ -223,48 +213,13 @@ GoogleDriveObject *FuseThread::getObjectForPath(QString path)
         }
         ret = childItem;
     }
-    D("Returning item:"<<(ret?ret->getName():"--NONE--"));
+    D("Returning item:"<<(ret.isValid()?ret.getName():"--NONE--"));
     return ret;
 }
 
 void FuseThread::validatePath(QString path)
 {
     getObjectForPath(path);
-    /*
-    D("Validate path:"<<path);
-    QStringList elements = path.split("/");
-    QString pathToCheck = "/";
-    if (path=="/") {
-        elements.append("");
-    }
-    while(!elements.isEmpty()) {
-        QString element = elements.takeFirst();
-        QString elementPath = pathToCheck;
-        if (!element.isEmpty()) {
-            if (!pathToCheck.endsWith("/")) {
-                pathToCheck += "/";
-            }
-            pathToCheck += element;
-        }
-
-        D("Checking path:"<<pathToCheck);
-        if (this->directories.contains(pathToCheck)) {
-            continue;
-        }
-        if (elementPath!=pathToCheck) {
-            QVector<QJsonValue> files = this->directories.value(elementPath);
-
-        }
-        emit readFolder(pathToCheck);
-        int limit=0;
-        while(this->gofish->pathInFlight(pathToCheck) && (limit++)<1000) {
-            QThread::yieldCurrentThread();
-        }
-        D("Locking...");
-        QMutexLocker locker(this->gofish->getBlockingLock(path));
-        D("Locked.. onto the next bit...");
-    }
-    */
 }
 
 int FuseThread::fuse_getattr(const char *path, struct stat *stbuf)

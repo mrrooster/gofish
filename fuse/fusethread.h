@@ -39,9 +39,9 @@ private:
     uid_t user;
     gid_t group;
     GoogleDrive *gofish;
-    GoogleDriveObject *root;
+    GoogleDriveObject root;
 
-    GoogleDriveObject *getObjectForPath(QString path);
+    GoogleDriveObject getObjectForPath(QString path);
     void validatePath(QString path);
 
     static int fuse_getattr(const char *path, struct stat *stbuf);

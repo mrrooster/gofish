@@ -2,7 +2,7 @@
 #define GOOGLEDRIVE_H
 
 #include <QObject>
-#include <QOAuth2AuthorizationCodeFlow>
+#include "goauth2authorizationcodeflow.h"
 #include <QTimer>
 #include <QVector>
 #include <QJsonValue>
@@ -32,10 +32,11 @@ signals:
 
 public slots:
     void readRemoteFolder(QString path);
+    void readRemoteFolder(QString path,QString parentId);
     void getFileContents(QString fileId, quint64 start, quint64 length);
 
 private:
-    QOAuth2AuthorizationCodeFlow *auth;
+    GOAuth2AuthorizationCodeFlow *auth;
     QTimer refreshTokenTimer;
     QTimer operationTimer;
     ConnectionState state;
@@ -52,6 +53,7 @@ private:
     void setRefreshToken(QString token);
     void setState(ConnectionState newState);
     void readFolder(QString startPath, QString path,QString nextPageToken,QString currentFolderId);
+    void readFolder(QString startPath, QString nextPageToken, QString parentId);
     void readFileSection(QString fileId, quint64 start, quint64 length);
 
     void queueOp(QPair<QUrl,QVariantMap> urlAndHeaders,std::function<void(QNetworkReply*)> handler);
