@@ -27,11 +27,10 @@ public:
 
 signals:
     void stateChanged(ConnectionState newState);
-    void folderContents(QString path,QVector<QJsonValue> fileList);
+    void folderContents(QString path,QVector<QMap<QString,QString>> fileList);
     //void fileInfo(QString fileId,QJsonDocument fileInfo);
 
 public slots:
-    void readRemoteFolder(QString path);
     void readRemoteFolder(QString path,QString parentId);
     void getFileContents(QString fileId, quint64 start, quint64 length);
 
@@ -40,7 +39,7 @@ private:
     QTimer refreshTokenTimer;
     QTimer operationTimer;
     ConnectionState state;
-    QMap<QString,QVector<QJsonValue>*> inflightValues;
+    QMap<QString,QVector<QMap<QString,QString>>*> inflightValues;
     QMap<QString,QByteArray> pendingSegments;
     QVector<QString> inflightPaths;
     QVector<QString> preflightPaths;

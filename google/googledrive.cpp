@@ -250,7 +250,14 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
 
                 for(int idx=0;idx<files.size();idx++) {
                     const QJsonValue file = files[idx];
-                    this->inflightValues.value(startPath)->append(file);
+                    QMap<QString,QString> fileInfo;
+                    fileInfo.insert("id",file["id"]);
+                    fileInfo.insert("name",file["name"]);
+                    fileInfo.insert("mimeType",file["mimeType"]);
+                    fileInfo.insert("size",file["size"]);
+                    fileInfo.insert("createdTime",file["createdTime"]);
+                    fileInfo.insert("modifiedTime",file["modifiedTime"]);
+                    this->inflightValues.value(startPath)->append(fileInfo);
                 }
                 if (!doc["nextPageToken"].isString()) {
                     emit folderContents(startPath,*this->inflightValues.value(startPath));
@@ -272,86 +279,6 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
         }
     });
 }
-
-void GoogleDrive::readFolder(QString startPath, QString path, QString nextPageToken, QString currentFolderId)
-{
-    QUrl url = files_list;
-
-    if (!path.endsWith("/")) {
-        path+="/";
-    }
-
-    path = path.mid(path.indexOf('/')+1);
-    QString dir = path.left(path.indexOf('/'));
-    path = path.mid(path.indexOf('/'));
-
-
-//    QString query = (dir.isEmpty())?
-    QString queryString = QString("'%1' in parents").arg(currentFolderId);
-
-    if (currentFolderId.isEmpty()) {
-       queryString = "('root' in parents or sharedWithMe = true)";
-    }
-
-    if (!dir.isEmpty()) {
-        // Only looking for folders
-        queryString += " and mimeType = 'application/vnd.google-apps.folder'";
-    }
-
-    D("dir:"<<dir);
-    D("Startpath:"<<startPath);
-    D("path:"<<path);
-    D("Query: "<<queryString);
-    QString query = QString("q=%1").arg(QString(QUrl::toPercentEncoding(queryString," '")).replace(" ","+"));
-    if (!nextPageToken.isEmpty()) {
-        query += QString("&pageToken=%1").arg(QString(QUrl::toPercentEncoding(nextPageToken," '")).replace(" ","+"));
-    }
-    query += "&fields=files(name,size,mimeType,id,kind,createdTime,modifiedTime)";
-    D( "Q:"<<query);
-    url.setQuery(query);
-    D("url:"<<url.toString());
-    queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QNetworkReply *response){
-        QByteArray responseData = response->readAll();
-        //D("Read file response data:"<<responseData);
-        QJsonDocument doc = QJsonDocument::fromJson(responseData);
-        //D("Got response:"<<doc);
-        if (doc.isObject()) {
-            if (doc["files"].isArray()) {
-                auto files = doc["files"].toArray();
-
-                bool doFileList = dir.isEmpty();
-                for(int idx=0;idx<files.size();idx++) {
-                    const QJsonValue file = files[idx];
-                    if (doFileList) {
-                        this->inflightValues.value(startPath)->append(file);
-                    } else {
-                        QString dirName = file["'name"].toString();
-                        D("Got dir from google:"<<file["name"]<<file["mimeType"]);
-                        if (dir==file["name"].toString()) {
-                            this->readFolder(startPath,path,"",file["id"].toString());
-                            return;
-                        }
-                    }
-                }
-                if (doFileList && !doc["nextPageToken"].isString()) {
-                    emit folderContents(startPath,*this->inflightValues.value(startPath));
-                    this->inflightPaths.removeOne(startPath);
-                    D("Releasing lock (drive)"<<startPath);
-                    getBlockingLock(startPath)->unlock();
-                    delete this->inflightValues.take(startPath);
-                    return;
-                } else {
-                    emit folderContents(startPath,QVector<QJsonValue>());
-                }
-            }
-            if (doc["nextPageToken"].isString()) {
-                D("Has next page! :"<<doc["nextPageToken"].toString());
-                this->readFolder(startPath,path,doc["nextPageToken"].toString(),currentFolderId);
-            }
-        }
-    });
-}
-
 void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
 {
     QString id = QString("%1:%2:%3").arg(fileId).arg(start).arg(length);

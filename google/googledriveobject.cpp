@@ -221,7 +221,7 @@ void GoogleDriveObject::operator =(const GoogleDriveObject &other)
 
 void GoogleDriveObject::setupConnections()
 {
-    connect(this->gofish,&GoogleDrive::folderContents,[=](QString path, QVector<QJsonValue> files){
+    connect(this->gofish,&GoogleDrive::folderContents,[=](QString path, QVector<QMap<QString,QString>> files){
         QString myPath = this->getPath();
 
         if (myPath==path) {
