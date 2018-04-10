@@ -127,7 +127,7 @@ void GoogleDrive::readRemoteFolder(QString path, QString parentId)
     if (this->inflightValues.contains(path)) {
         this->inflightValues.value(path)->clear();
     } else {
-        this->inflightValues.insert(path,new QVector<QVariantMap>());
+        this->inflightValues.insert(path,QVector<QVariantMap>());
     }
     getBlockingLock(path)->lock();
     this->inflightPaths.append(path);
@@ -241,10 +241,9 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                 }
                 if (!doc["nextPageToken"].isString()) {
                     emit folderContents(startPath,*this->inflightValues.value(startPath));
-                    this->inflightPaths.removeOne(startPath);
                     D("Releasing lock (drive)"<<startPath);
                     getBlockingLock(startPath)->unlock();
-                    delete this->inflightValues.take(startPath);
+                    this->inflightValues.take(startPath)->deleteLater();
                     return;
                 } else {
                     emit folderContents(startPath,QVector<QVariantMap>());
