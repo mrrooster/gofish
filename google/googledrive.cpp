@@ -243,7 +243,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                     emit folderContents(startPath,*this->inflightValues.value(startPath));
                     D("Releasing lock (drive)"<<startPath);
                     getBlockingLock(startPath)->unlock();
-                    this->inflightValues.take(startPath)->deleteLater();
+                    delete this->inflightValues.take(startPath);
                     return;
                 } else {
                     emit folderContents(startPath,QVector<QVariantMap>());
