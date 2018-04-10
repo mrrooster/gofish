@@ -229,7 +229,7 @@ void GoogleDriveObject::setupConnections()
             this->contents.clear();
             this->childFolderCount=0;
             for(int idx=0;idx<files.size();idx++) {
-                QJsonValue file = files.at(idx);
+                QMap<QString,QString> file = files.at(idx);
 //                D("File: "<<file);
 
                 GoogleDriveObject newObj(
