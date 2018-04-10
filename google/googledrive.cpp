@@ -267,14 +267,14 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                     delete this->inflightValues.take(startPath);
                     return;
                 } else {
-                    emit folderContents(startPath,QVector<QJsonValue>());
+                    emit folderContents(startPath,QVector<QMap<QString,QString>>());
                 }
             }
             if (doc["nextPageToken"].isString()) {
                 D("Has next page! :"<<doc["nextPageToken"].toString());
                 this->readFolder(startPath,doc["nextPageToken"].toString(),parentId);
             } else {
-                emit folderContents(startPath,QVector<QJsonValue>());
+                emit folderContents(startPath,QVector<QMap<QString,QString>>());
             }
         }
     });
