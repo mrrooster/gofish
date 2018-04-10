@@ -117,26 +117,6 @@ GoogleDrive::~GoogleDrive()
     }
 }
 
-void GoogleDrive::readRemoteFolder(QString path)
-{
-    D("read remote folder."<<path);
-    if (this->inflightPaths.contains(path)) {
-        D("Another request in progress.");
-        return;
-    }
-    if (this->inflightValues.contains(path)) {
-        this->inflightValues.value(path)->clear();
-    } else {
-        this->inflightValues.insert(path,new QVector<QJsonValue>());
-    }
-    getBlockingLock(path)->lock();
-    this->inflightPaths.append(path);
-    D("Removing path from preflight: "<<path);
-    this->preflightPaths.removeOne(path);
-    D("read remote folder.. locked."<<path);
-    readFolder(path,path,"","");
-}
-
 void GoogleDrive::readRemoteFolder(QString path, QString parentId)
 {
     D("read remote folder."<<path);
