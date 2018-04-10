@@ -127,7 +127,7 @@ void GoogleDrive::readRemoteFolder(QString path, QString parentId)
     if (this->inflightValues.contains(path)) {
         this->inflightValues.value(path)->clear();
     } else {
-        this->inflightValues.insert(path,new QVector<QMap<QString,QString>>());
+        this->inflightValues.insert(path,new QVector<QVariantMap>());
     }
     getBlockingLock(path)->lock();
     this->inflightPaths.append(path);
@@ -231,12 +231,12 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                 for(int idx=0;idx<files.size();idx++) {
                     const QJsonValue file = files[idx];
                     QMap<QString,QString> fileInfo;
-                    fileInfo.insert("id",file["id"].toString());
-                    fileInfo.insert("name",file["name"].toString());
-                    fileInfo.insert("mimeType",file["mimeType"].toString());
-                    fileInfo.insert("size",file["size"].toString());
-                    fileInfo.insert("createdTime",file["createdTime"].toString());
-                    fileInfo.insert("modifiedTime",file["modifiedTime"].toString());
+                    fileInfo.insert("id",file["id"].toVariant());
+                    fileInfo.insert("name",file["name"].toVariant());
+                    fileInfo.insert("mimeType",file["mimeType"].toVariant());
+                    fileInfo.insert("size",file["size"].toVariant());
+                    fileInfo.insert("createdTime",file["createdTime"].toVariant());
+                    fileInfo.insert("modifiedTime",file["modifiedTime"].toVariant());
                     this->inflightValues.value(startPath)->append(fileInfo);
                 }
                 if (!doc["nextPageToken"].isString()) {
@@ -247,14 +247,14 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                     delete this->inflightValues.take(startPath);
                     return;
                 } else {
-                    emit folderContents(startPath,QVector<QMap<QString,QString>>());
+                    emit folderContents(startPath,QVector<QVariantMap>());
                 }
             }
             if (doc["nextPageToken"].isString()) {
                 D("Has next page! :"<<doc["nextPageToken"].toString());
                 this->readFolder(startPath,doc["nextPageToken"].toString(),parentId);
             } else {
-                emit folderContents(startPath,QVector<QMap<QString,QString>>());
+                emit folderContents(startPath,QVector<QVariantMap>());
             }
         }
     });

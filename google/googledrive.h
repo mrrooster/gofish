@@ -27,7 +27,7 @@ public:
 
 signals:
     void stateChanged(ConnectionState newState);
-    void folderContents(QString path,QVector<QMap<QString,QString>> fileList);
+    void folderContents(QString path,QVector<QVariantMap> fileList);
     //void fileInfo(QString fileId,QJsonDocument fileInfo);
 
 public slots:
@@ -39,7 +39,7 @@ private:
     QTimer refreshTokenTimer;
     QTimer operationTimer;
     ConnectionState state;
-    QMap<QString,QVector<QMap<QString,QString>>*> inflightValues;
+    QMap<QString,QVector<QVariantMap>*> inflightValues;
     QMap<QString,QByteArray> pendingSegments;
     QVector<QString> inflightPaths;
     QVector<QString> preflightPaths;

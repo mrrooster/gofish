@@ -221,7 +221,7 @@ void GoogleDriveObject::operator =(const GoogleDriveObject &other)
 
 void GoogleDriveObject::setupConnections()
 {
-    connect(this->gofish,&GoogleDrive::folderContents,[=](QString path, QVector<QMap<QString,QString>> files){
+    connect(this->gofish,&GoogleDrive::folderContents,[=](QString path, QVector<QVariantMap> files){
         QString myPath = this->getPath();
 
         if (myPath==path) {
@@ -229,7 +229,7 @@ void GoogleDriveObject::setupConnections()
             this->contents.clear();
             this->childFolderCount=0;
             for(int idx=0;idx<files.size();idx++) {
-                QMap<QString,QString> file = files.at(idx);
+                QVariantMap file = files.at(idx);
 //                D("File: "<<file);
 
                 GoogleDriveObject newObj(
@@ -238,7 +238,7 @@ void GoogleDriveObject::setupConnections()
                             path,
                             file["name"].toString(),
                             file["mimeType"].toString(),
-                            file["size"].toVariant().toULongLong(),
+                            file["size"].toULongLong(),
                             QDateTime::fromString(file["createdTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
                             QDateTime::fromString(file["modifiedTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
                             this->cache
