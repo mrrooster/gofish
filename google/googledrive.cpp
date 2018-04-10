@@ -230,7 +230,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
 
                 for(int idx=0;idx<files.size();idx++) {
                     const QJsonValue file = files[idx];
-                    QMap<QString,QString> fileInfo;
+                    QVariantMap fileInfo;
                     fileInfo.insert("id",file["id"].toVariant());
                     fileInfo.insert("name",file["name"].toVariant());
                     fileInfo.insert("mimeType",file["mimeType"].toVariant());
