@@ -147,7 +147,7 @@ void GoogleDrive::readRemoteFolder(QString path, QString parentId)
     if (this->inflightValues.contains(path)) {
         this->inflightValues.value(path)->clear();
     } else {
-        this->inflightValues.insert(path,new QVector<QJsonValue>());
+        this->inflightValues.insert(path,new QVector<QMap<QString,QString>());
     }
     getBlockingLock(path)->lock();
     this->inflightPaths.append(path);
@@ -251,12 +251,12 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                 for(int idx=0;idx<files.size();idx++) {
                     const QJsonValue file = files[idx];
                     QMap<QString,QString> fileInfo;
-                    fileInfo.insert("id",file["id"]);
-                    fileInfo.insert("name",file["name"]);
-                    fileInfo.insert("mimeType",file["mimeType"]);
-                    fileInfo.insert("size",file["size"]);
-                    fileInfo.insert("createdTime",file["createdTime"]);
-                    fileInfo.insert("modifiedTime",file["modifiedTime"]);
+                    fileInfo.insert("id",file["id"].toString());
+                    fileInfo.insert("name",file["name"].toString());
+                    fileInfo.insert("mimeType",file["mimeType"].toString());
+                    fileInfo.insert("size",file["size"].toString());
+                    fileInfo.insert("createdTime",file["createdTime"].toString());
+                    fileInfo.insert("modifiedTime",file["modifiedTime"].toString());
                     this->inflightValues.value(startPath)->append(fileInfo);
                 }
                 if (!doc["nextPageToken"].isString()) {
