@@ -147,7 +147,7 @@ void GoogleDrive::readRemoteFolder(QString path, QString parentId)
     if (this->inflightValues.contains(path)) {
         this->inflightValues.value(path)->clear();
     } else {
-        this->inflightValues.insert(path,new QVector<QMap<QString,QString>());
+        this->inflightValues.insert(path,new QVector<QMap<QString,QString>>());
     }
     getBlockingLock(path)->lock();
     this->inflightPaths.append(path);
