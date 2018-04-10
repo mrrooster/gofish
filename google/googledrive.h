@@ -8,6 +8,7 @@
 #include <QJsonValue>
 #include <QJsonDocument>
 #include <QMutex>
+class GoogleDriveObject;
 
 class GoogleDrive : public QObject
 {
@@ -27,11 +28,9 @@ public:
 
 signals:
     void stateChanged(ConnectionState newState);
-    void folderContents(QString path,QVector<QVariantMap> fileList);
-    //void fileInfo(QString fileId,QJsonDocument fileInfo);
 
 public slots:
-    void readRemoteFolder(QString path,QString parentId);
+    void readRemoteFolder(QString path, QString parentId, GoogleDriveObject *target);
     void getFileContents(QString fileId, quint64 start, quint64 length);
 
 private:
@@ -52,7 +51,7 @@ private:
     void setRefreshToken(QString token);
     void setState(ConnectionState newState);
     void readFolder(QString startPath, QString path,QString nextPageToken,QString currentFolderId);
-    void readFolder(QString startPath, QString nextPageToken, QString parentId);
+    void readFolder(QString startPath, QString nextPageToken, QString parentId, GoogleDriveObject *target);
     void readFileSection(QString fileId, quint64 start, quint64 length);
 
     void queueOp(QPair<QUrl,QVariantMap> urlAndHeaders,std::function<void(QNetworkReply*)> handler);

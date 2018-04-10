@@ -27,8 +27,8 @@ public:
     int closeDir(const char *path, struct fuse_file_info *fi);
 
     int open(const char *path, struct fuse_file_info *fi);
-    int read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi);
-
+    int read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
+    int close(const char *, struct fuse_file_info *fi);
 
 public slots:
 
@@ -39,9 +39,9 @@ private:
     uid_t user;
     gid_t group;
     GoogleDrive *gofish;
-    GoogleDriveObject root;
+    GoogleDriveObject *root;
 
-    GoogleDriveObject getObjectForPath(QString path);
+    GoogleDriveObject *getObjectForPath(QString path);
     void validatePath(QString path);
 
     static int fuse_getattr(const char *path, struct stat *stbuf);

@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QJsonValue>
 #include <iostream>
+#include "googledriveobject.h"
 #include "googlenetworkaccessmanager.h"
 #include "goauth2authorizationcodeflow.h"
 
@@ -117,7 +118,7 @@ GoogleDrive::~GoogleDrive()
     }
 }
 
-void GoogleDrive::readRemoteFolder(QString path, QString parentId)
+void GoogleDrive::readRemoteFolder(QString path, QString parentId, GoogleDriveObject *target)
 {
     D("read remote folder."<<path);
     if (this->inflightPaths.contains(path)) {
@@ -129,12 +130,13 @@ void GoogleDrive::readRemoteFolder(QString path, QString parentId)
     } else {
         this->inflightValues.insert(path,new QVector<QVariantMap>());
     }
-    getBlockingLock(path)->lock();
+    QMutex *mtex = getBlockingLock(path);
+    mtex->lock();
     this->inflightPaths.append(path);
-    D("Removing path from preflight: "<<path);
+    D("Removing path from preflight: "<<path<<mtex);
     this->preflightPaths.removeOne(path);
     D("read remote folder.. locked."<<path);
-    readFolder(path,"",parentId);
+    readFolder(path,"",parentId,target);
 }
 
 QMutex *GoogleDrive::getBlockingLock(QString folder)
@@ -201,7 +203,7 @@ void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)
     return;
 }
 
-void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId)
+void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId, GoogleDriveObject *target)
 {
     D("readFolder: startPath:"<<startPath<<", parentId: "<<parentId<<", Next page token:"<<nextPageToken);
     QUrl url = files_list;
@@ -240,20 +242,40 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                     this->inflightValues.value(startPath)->append(fileInfo);
                 }
                 if (!doc["nextPageToken"].isString()) {
-                    emit folderContents(startPath,*this->inflightValues.value(startPath));
-                    D("Releasing lock (drive)"<<startPath);
-                    getBlockingLock(startPath)->unlock();
+                    this->inflightPaths.removeAll(startPath);
+                    QVector<GoogleDriveObject*> newChildren;
+                    for(auto it = this->inflightValues.value(startPath)->begin(),end = this->inflightValues.value(startPath)->end(); it!=end; it++) {
+                        QVariantMap file = (*it);
+        //                D("File: "<<file);
+
+                        GoogleDriveObject *newObj = new GoogleDriveObject(
+                                    this,
+                                    file["id"].toString(),
+                                    startPath,
+                                    file["name"].toString(),
+                                    file["mimeType"].toString(),
+                                    file["size"].toULongLong(),
+                                    QDateTime::fromString(file["createdTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
+                                    QDateTime::fromString(file["modifiedTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
+                                    target->getCache()
+                                   );
+                        newChildren.append(newObj);
+                    }
+                    target->setChildren(newChildren);
+                    QMutex *mtex = getBlockingLock(startPath);
+                    mtex->unlock();
+                    D("Releasing lock (drive)"<<startPath<<mtex);
                     delete this->inflightValues.take(startPath);
                     return;
                 } else {
-                    emit folderContents(startPath,QVector<QVariantMap>());
+                    getBlockingLock(startPath)->unlock();
                 }
             }
             if (doc["nextPageToken"].isString()) {
                 D("Has next page! :"<<doc["nextPageToken"].toString());
-                this->readFolder(startPath,doc["nextPageToken"].toString(),parentId);
+                this->readFolder(startPath,doc["nextPageToken"].toString(),parentId,target);
             } else {
-                emit folderContents(startPath,QVector<QVariantMap>());
+                getBlockingLock(startPath)->unlock();
             }
         }
     });

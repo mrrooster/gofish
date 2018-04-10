@@ -21,12 +21,12 @@ FuseThread::FuseThread(int argc, char *argv[],GoogleDrive *gofish, QObject *pare
     this->user   = ::getuid();
     this->group  = ::getgid();
     this->gofish = gofish;
+    this->root  = new GoogleDriveObject(this->gofish);
 }
 
 void FuseThread::run()
 {
     D("In fuse thread...");
-    this->root  = GoogleDriveObject(this->gofish);
 
     struct fuse_operations *fuse_ops = new fuse_operations();
 
@@ -55,9 +55,9 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
     QString pathString(path);
     D("In getattr"<<path);
 
-    GoogleDriveObject item = getObjectForPath(path);
+    GoogleDriveObject *item = getObjectForPath(path);
 
-    if (!item.isValid()) {
+    if (!item) {
         return -ENOENT;
     }
 
@@ -65,21 +65,21 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
 
     stbuf->st_mode = 0666;
     stbuf->st_mode= 0555;
-    if (item.isFolder()) {
+    if (item->isFolder()) {
         D("Thingy is dir.");
         stbuf->st_mode |= S_IFDIR;
         stbuf->st_size = 512;
-        stbuf->st_nlink = 2 + item.getChildFolderCount();
+        stbuf->st_nlink = 2 + item->getChildFolderCount();
     } else {
         D("Thingy is regular file.");
         stbuf->st_mode |= S_IFREG;
-        stbuf->st_size = item.getSize();
+        stbuf->st_size = item->getSize();
         stbuf->st_nlink = 1;
     }
     stbuf->st_rdev = S_IFCHR;
-    stbuf->st_ctime= item.getCreatedTime().toTime_t();
-    stbuf->st_mtime= item.getCreatedTime().toTime_t();
-    stbuf->st_ino  = item.getInode();
+    stbuf->st_ctime= item->getCreatedTime().toTime_t();
+    stbuf->st_mtime= item->getCreatedTime().toTime_t();
+    stbuf->st_ino  = item->getInode();
     /*
     if (this->paths.contains(path)) {
         QJsonDocument doc = this->paths.value(path);
@@ -94,6 +94,8 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
     stbuf->st_gid = this->group;
     //stbuf->st
 
+    item->release();
+
     D("Leaving getattr:"<<path);
     return 0;
 }
@@ -101,59 +103,69 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
 int FuseThread::openDir(const char *path, struct fuse_file_info *fi)
 {
     D("In opendir"<<path);
-    validatePath(path);
+    GoogleDriveObject *obj = getObjectForPath(path);
+    fi->fh = reinterpret_cast<quint64>(obj);
+    return obj?0:-ENOENT;
     return 0;
 }
 
-int FuseThread::readDir(const char *path, void *buf,fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
+int FuseThread::readDir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
 {
     D("In readDir... "<<path);
-    GoogleDriveObject object = getObjectForPath(path);
-    if (!object.isValid()) {
+    GoogleDriveObject *object = reinterpret_cast<GoogleDriveObject*>(fi->fh);
+    if (!object) {
         D("reddir - Did not get object for path:"<<path);
         return -ENOENT;
     }
 
-    QVector<GoogleDriveObject> children = object.getChildren();
-    for(int idx=0;idx<children.size();idx++) {
-        if(filler(buf,children.at(idx).getName().toUtf8().constData(),0,0)) {
-            return -ENOMEM;
+    int ret = 0;
+    QVector<GoogleDriveObject*> children = object->getChildren();
+    for(int idx=offset;idx<children.size();idx++) {
+        GoogleDriveObject *child = children.at(idx);
+        if(ret==0 && filler(buf,child->getName().toUtf8().constData(),0,0)) {
+            ret = -ENOMEM;
         }
+        child->release();
     }
-    return 0;
+    return ret;
 }
 
 int FuseThread::closeDir(const char *path, struct fuse_file_info *fi)
 {
     D("In closedir:"<<path);
-    //this->directories.remove(path);
-    return 0;
+    GoogleDriveObject *item = reinterpret_cast<GoogleDriveObject*>(fi->fh);
+    if (item) {
+        item->release();
+    }
+    return (item)?0:-ENOENT;
 }
 
 int FuseThread::open(const char *path, struct fuse_file_info *fi)
 {
     D("In open"<<path);
-    return getObjectForPath(path).isValid();
+    GoogleDriveObject *obj = getObjectForPath(path);
+    fi->fh = reinterpret_cast<quint64>(obj);
+    return obj?0:-ENOENT;
 }
 
-int FuseThread::read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi)
+int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     D("In read"<<path<<", offset:"<<offset<<", size:"<<size);
 
-    GoogleDriveObject item = getObjectForPath(path);
+    GoogleDriveObject *item = reinterpret_cast<GoogleDriveObject*>(fi->fh);
 
-    quint64 blockSize = item.getBlockSize();
+    quint64 blockSize = item->getBlockSize();
     quint64 start = offset;
     quint64 readCount = 0;
     char *ptr=buf;
     quint64 chunkStart = (start/blockSize) * blockSize;
 
-    if (item.isValid()) {
+    if (item) {
         while (size>0) {
             D("Start: "<<start<<", chunkstart: "<<chunkStart<<", size: "<<size);
 
             // read a chunk
-            QByteArray data = item.read(chunkStart,blockSize);
+            QByteArray data = item->read(chunkStart,blockSize);
 
             Q_ASSERT(!data.isEmpty());
 
@@ -163,7 +175,7 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset,stru
             if (data.size()<copySize) {
                 copySize = data.size();
             }
-            int chunkAvailable = blockSize - (start-chunkStart);
+            quint64 chunkAvailable = blockSize - (start-chunkStart);
             if (size > chunkAvailable) {
                 copySize = chunkAvailable;
             }
@@ -178,20 +190,33 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset,stru
         }
     }
 
+    //item->release();
+
     D("Returning: "<<readCount);
 
     return readCount;
 }
 
-GoogleDriveObject FuseThread::getObjectForPath(QString path)
+int FuseThread::close(const char *, fuse_file_info *fi)
+{
+    GoogleDriveObject *item = reinterpret_cast<GoogleDriveObject*>(fi->fh);
+    if (item) {
+        item->release();
+    }
+    return (item)?0:-ENOENT;
+}
+
+GoogleDriveObject *FuseThread::getObjectForPath(QString path)
 {
     D("Get object for path: "<<path);
 
-    GoogleDriveObject &ret = this->root;
+    GoogleDriveObject *ret = this->root;
 
     path = path.mid(1); // Strip off the initial slash
 
-    while(!path.isEmpty() && ret.isValid()) {
+    ret->lock();
+
+    while(!path.isEmpty() && ret) {
         QString item = path.left(path.indexOf('/'));
         if (path.contains('/')) {
             path = path.mid(path.indexOf('/')+1);
@@ -199,27 +224,33 @@ GoogleDriveObject FuseThread::getObjectForPath(QString path)
             path = "";
         }
 
-        QVector<GoogleDriveObject> children = ret.getChildren();
+        QVector<GoogleDriveObject*> children = ret->getChildren();
         D("Got "<<children.size()<<"children");
 
-        GoogleDriveObject childItem;
+        GoogleDriveObject *childItem=nullptr;
         for(int idx=0;idx<children.size();idx++) {
 //            D("Checking:"<<children.at(idx).getName()<<idx);
-            if (children.at(idx).getName()==item) {
+            GoogleDriveObject *child = children.at(idx);
+            if (!childItem && child->getName()==item) {
 //                D("Found!");
-                childItem = children.at(idx);
-                break;
+                childItem = child;
+            } else {
+                child->release();
             }
         }
+        ret->release();
         ret = childItem;
     }
-    D("Returning item:"<<(ret.isValid()?ret.getName():"--NONE--"));
+    D("Returning item:"<<(ret?ret->getName():"--NONE--"));
     return ret;
 }
 
 void FuseThread::validatePath(QString path)
 {
-    getObjectForPath(path);
+    auto *ptr = getObjectForPath(path);
+    if (ptr) {
+        ptr->release();
+    }
 }
 
 int FuseThread::fuse_getattr(const char *path, struct stat *stbuf)
@@ -249,8 +280,7 @@ int FuseThread::fuse_open(const char *path, struct fuse_file_info *fi)
 
 int FuseThread::fuse_close(const char *path, struct fuse_file_info *fi)
 {
-    qDebug()<<"In close"<<path;
-    return 0;
+    return static_cast<FuseThread*>(fuse_get_context()->private_data)->close(path,fi);
 }
 
 int FuseThread::fuse_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
