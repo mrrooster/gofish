@@ -22,7 +22,8 @@ SOURCES += main.cpp \
     google/googledrive.cpp \
     fuse/fusethread.cpp \
     google/googledriveobject.cpp \
-    google/googlenetworkaccessmanager.cpp
+    google/googlenetworkaccessmanager.cpp \
+    google/goauth2authorizationcodeflow.cpp
 
 HEADERS += \
     google/oauth2handler.h \
@@ -31,6 +32,7 @@ HEADERS += \
     google/googledriveobject.h \
     google/googlenetworkaccessmanager.h \
     defaults.h \
-    clientid.h
+    clientid.h \
+    google/goauth2authorizationcodeflow.h
 
 DISTFILES +=
