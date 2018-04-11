@@ -26,6 +26,7 @@ public:
     bool pathInFlight(QString path);
     QByteArray getPendingSegment(QString fileId, quint64 start, quint64 length);
     unsigned int getRefreshSeconds();
+    quint64 getInMemoryCacheSizeBytes();
 
 signals:
     void stateChanged(ConnectionState newState);

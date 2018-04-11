@@ -7,6 +7,7 @@
 #include "googledriveobject.h"
 #include "googlenetworkaccessmanager.h"
 #include "goauth2authorizationcodeflow.h"
+#include "defaults.h"
 
 #define DEBUG_GOOGLEDRIVE
 #ifdef DEBUG_GOOGLEDRIVE
@@ -194,6 +195,13 @@ unsigned int GoogleDrive::getRefreshSeconds()
     QSettings settings;
     settings.beginGroup("googledrive");
     return settings.value("refresh_seconds",3600).toUInt()
+}
+
+quint64 GoogleDrive::getInMemoryCacheSizeBytes()
+{
+    QSettings settings;
+    settings.beginGroup("googledrive");
+    return settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toUInt()
 }
 
 void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)

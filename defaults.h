@@ -6,7 +6,7 @@
 #define READ_CHUNK_SIZE (1024*1024*2) // 2MB for now.
 #define CACHE_CHUNK_SIZE (1024*64)   // Cache 64k 'blocks'
 
-#define DEFAULT_CACHE_SIZE (1024*1024*1024) // 1gig
+#define DEFAULT_CACHE_SIZE (1024*1024*128) // 128mb
 
 
 #endif // DEFAULTS_H

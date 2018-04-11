@@ -46,6 +46,11 @@ int main(int argc, char *argv[])
         settings.beginGroup("googledrive");
         settings.setValue("refresh_seconds",parser.value(refreshSecondsOpt));
     }
+    if (!parser.value(cacheSizeOpt).isNull()) {
+        QSettings settings;
+        settings.beginGroup("googledrive");
+        settings.setValue("in_memory_cache_bytes",parser.value(cacheSizeOpt));
+    }
 
     GoogleDrive googledrive();
 
