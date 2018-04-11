@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
         settings.setValue("in_memory_cache_bytes",parser.value(cacheSizeOpt));
     }
 
-    GoogleDrive googledrive();
+    GoogleDrive googledrive;
 
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {
