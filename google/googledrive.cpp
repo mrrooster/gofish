@@ -21,8 +21,13 @@ const QUrl access_token_url("https://www.googleapis.com/oauth2/v4/token");
 const QUrl files_list("https://www.googleapis.com/drive/v3/files");
 const QUrl files_info("https://www.googleapis.com/drive/v3/files/");
 
-GoogleDrive::GoogleDrive(const QString clientId, const QString clientSecret, QObject *parent) : QObject(parent),state(Disconnected)
+GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),state(Disconnected)
 {
+    QSettings settings;
+    settings.beginGroup("googledrive");
+
+    QString clientId = settings.value("client_id").toString();
+    QString clientSecret = settings.value("client_secret").toString();
 
     //Operation timer
     connect(&this->operationTimer,&QTimer::timeout,[=]() {
@@ -182,6 +187,13 @@ QByteArray GoogleDrive::getPendingSegment(QString fileId, quint64 start, quint64
         return this->pendingSegments.take(id);
     }
     return QByteArray();
+}
+
+unsigned int GoogleDrive::getRefreshSeconds()
+{
+    QSettings settings;
+    settings.beginGroup("googledrive");
+    return settings.value("refresh_seconds",3600).toUInt()
 }
 
 void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)

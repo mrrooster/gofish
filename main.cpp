@@ -1,5 +1,7 @@
 #include <QCoreApplication>
 #include <QThread>
+#include <QSettings>
+#include <QCommandLineParser>
 
 #include "google/googledrive.h"
 #include "fuse/fusethread.h"
@@ -19,7 +21,33 @@ int main(int argc, char *argv[])
                                             );
 
     QCoreApplication a(argc, argv);
-    GoogleDrive googledrive(GOOGLE_DRIVE_CLIENT_ID,GOOGLE_DRIVE_CLIENT_SECRET);
+
+    QCommandLineParser parser;
+    QCommandLineOption clientIdOpt("id","Set the google client ID, you must do this at least once.");
+    QCommandLineOption clientSecretOpt("secret","Set the google client secret, you must do this at least once.");
+    QCommandLineOption refreshSecondsOpt("r","Set the number of seconds between refreshes, the longer this value is the better performance will be, however remote changes may not become visible.");
+    QCommandLineOption cacheSizeOpt("c","Set the size of the in memory block cache in bytes. More memory good.");
+
+    parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive.");
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.addOption(clientIdOpt);
+    parser.addOption(clientSecretOpt);
+
+    parser.process(a);
+    if (!parser.value(clientIdOpt).isEmpty()) {
+        QSettings settings;
+        settings.beginGroup("googledrive");
+        settings.setValue("client_id",parser.value(clientIdOpt));
+        settings.setValue("client_secret",parser.value(clientSecretOpt));
+    }
+    if (!parser.value(refreshSecondsOpt).isNull()) {
+        QSettings settings;
+        settings.beginGroup("googledrive");
+        settings.setValue("refresh_seconds",parser.value(refreshSecondsOpt));
+    }
+
+    GoogleDrive googledrive();
 
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {

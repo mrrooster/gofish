@@ -16,7 +16,7 @@ class GoogleDrive : public QObject
 public:
     enum ConnectionState { Disconnected,Connected };
 
-    explicit GoogleDrive(const QString clientId, const QString clientSecret, QObject *parent = nullptr);
+    explicit GoogleDrive(QObject *parent = nullptr);
     ~GoogleDrive();
 
     QMutex *getBlockingLock(QString folder);
@@ -25,6 +25,7 @@ public:
     bool pathInPreflight(QString path);
     bool pathInFlight(QString path);
     QByteArray getPendingSegment(QString fileId, quint64 start, quint64 length);
+    unsigned int getRefreshSeconds();
 
 signals:
     void stateChanged(ConnectionState newState);
