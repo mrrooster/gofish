@@ -22,6 +22,12 @@ FuseThread::FuseThread(int argc, char *argv[],GoogleDrive *gofish, QObject *pare
     this->user   = ::getuid();
     this->group  = ::getgid();
     this->gofish = gofish;
+}
+
+void FuseThread::run()
+{
+    D("In fuse thread...");
+
     QSettings settings;
     settings.beginGroup("googledrive");
 
@@ -30,11 +36,6 @@ FuseThread::FuseThread(int argc, char *argv[],GoogleDrive *gofish, QObject *pare
                 settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toUInt(),
                 settings.value("refresh_seconds",600).toUInt()
                 );
-}
-
-void FuseThread::run()
-{
-    D("In fuse thread...");
 
     struct fuse_operations *fuse_ops = new fuse_operations();
 
