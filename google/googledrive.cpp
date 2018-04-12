@@ -63,7 +63,8 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),state(Disconnected)
     this->auth->setScope("https://www.googleapis.com/auth/drive.readonly");
 
     connect(&this->refreshTokenTimer,&QTimer::timeout,[=]() {
-        D("Do I crash?");
+        D("Calling token refresh...");
+        this->auth->refreshToken();
     });
 
     // Handle a refreshed token....
