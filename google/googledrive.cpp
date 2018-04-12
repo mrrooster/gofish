@@ -90,7 +90,9 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),state(Disconnected)
            D( "Authorised. Starting token refresh timer.");
            D( "Token expires at:" <<this->auth->expirationAt().toString());
 
-           quint64 msecs = 120000;
+           quint64 msecs = 600000;
+
+           D("Setting token refresh timer for"<<msecs<<"ms.");
 
            this->refreshTokenTimer.start(msecs);
 
