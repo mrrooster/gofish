@@ -15,13 +15,15 @@
 #define SD(x)
 #endif
 
-GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint32 cacheSize, QObject *parent) :
-    GoogleDriveObject::GoogleDriveObject(gofish,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),new QCache<QString,QByteArray>(cacheSize),parent)
+GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint32 cacheSize, quint32 refreshSecs, QObject *parent) :
+    GoogleDriveObject::GoogleDriveObject(gofish,refreshSecs,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),new QCache<QString,QByteArray>(cacheSize),parent)
 {
     lock();
+    qInfo()<<"Using in memory cache of"<<(cacheSize/1024/1024)<<"MiB.";
+    qInfo()<<"Refresh folder contents every"<<refreshSecs<<"seconds.";
 }
 
-GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent) :
+GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint64 refreshSecs, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent) :
     QObject(parent),
     populated(false)
 {
@@ -40,6 +42,7 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString pa
     this->mtime    = mtime;
     this->childFolderCount = 0;
     this->usageCount = 0;
+    this->refreshSecs= refreshSecs;
 
     setupConnections();
 
@@ -120,7 +123,7 @@ QVector<GoogleDriveObject *> GoogleDriveObject::getChildren()
     qint64 currentSecs = QDateTime::currentSecsSinceEpoch();
     QString fullPath = getPath();
     D("In get children of: "<<fullPath);
-    if (this->isFolder() && (!this->populated || (currentSecs-this->updated)>300)) {
+    if (this->isFolder() && (!this->populated || (currentSecs-this->updated)>getRefreshSecs())) {
         this->gofish->addPathToPreFlightList(fullPath);
         emit readFolder(fullPath,this->id.isEmpty()?"root":this->id,this);
         QThread::yieldCurrentThread();
@@ -283,7 +286,12 @@ void GoogleDriveObject::setupConnections()
 void GoogleDriveObject::lock()
 {
     this->usageCount++;
-//    D("Locked item:"<<this->usageCount);
+    //    D("Locked item:"<<this->usageCount);
+}
+
+quint32 GoogleDriveObject::getRefreshSecs()
+{
+   return this->refreshSecs;
 }
 
 void GoogleDriveObject::release()

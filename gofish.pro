@@ -32,7 +32,6 @@ HEADERS += \
     google/googledriveobject.h \
     google/googlenetworkaccessmanager.h \
     defaults.h \
-    clientid.h \
     google/goauth2authorizationcodeflow.h
 
 DISTFILES +=

@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include "defaults.h"
+#include <QSettings>
 
 #define DEBUG_FUSE
 #ifdef DEBUG_FUSE
@@ -21,7 +22,14 @@ FuseThread::FuseThread(int argc, char *argv[],GoogleDrive *gofish, QObject *pare
     this->user   = ::getuid();
     this->group  = ::getgid();
     this->gofish = gofish;
-    this->root  = new GoogleDriveObject(this->gofish);
+    QSettings settings;
+    settings.beginGroup("googledrive");
+
+    this->root  = new GoogleDriveObject(
+                this->gofish,
+                settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toUInt(),
+                settings.value("refresh_seconds",600).toUInt()
+                );
 }
 
 void FuseThread::run()

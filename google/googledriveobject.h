@@ -11,8 +11,8 @@ class GoogleDriveObject : public QObject
 {
     Q_OBJECT
 public:
-    explicit GoogleDriveObject(GoogleDrive *gofish, quint32 cacheSize = DEFAULT_CACHE_SIZE, QObject *parent = nullptr);
-    explicit GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent=nullptr);
+    explicit GoogleDriveObject(GoogleDrive *gofish, quint32 cacheSize, quint32 refreshSecs, QObject *parent = nullptr);
+    explicit GoogleDriveObject(GoogleDrive *gofish, quint64 refreshSecs, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent=nullptr);
     ~GoogleDriveObject();
 
     bool isFolder() const;
@@ -31,6 +31,7 @@ public:
     QCache<QString,QByteArray> *getCache() const;
     void release();
     void lock();
+    quint32 getRefreshSecs();
 
 //    void operator =(const GoogleDriveObject &other);
 signals:
@@ -52,6 +53,7 @@ private:
     QDateTime ctime;
     QDateTime mtime;
     qint64 updated;
+    quint32 refreshSecs;
 
     GoogleDrive *gofish;
     QCache<QString,QByteArray> *cache;
