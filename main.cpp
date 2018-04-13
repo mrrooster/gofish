@@ -27,6 +27,7 @@ int main(int argc, char *argv[])
     QCommandLineOption refreshSecondsOpt("refresh-secs","Set the number of seconds between refreshes, the longer this value is the better performance will be, however remote changes may not become visible.","Seconds");
     QCommandLineOption cacheSizeOpt("cache-bytes","Set the size of the in memory block cache in bytes. More memory good.","Bytes");
     QCommandLineOption foregroundOpt("f","Run in the foreground");
+    QCommandLineOption optionsOpt("o","Fuse fs options","Options");
 
     parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive.");
     parser.addHelpOption();
@@ -36,6 +37,7 @@ int main(int argc, char *argv[])
     parser.addOption(foregroundOpt);
     parser.addOption(cacheSizeOpt);
     parser.addOption(refreshSecondsOpt);
+    parser.addOption(optionsOpt);
     parser.process(a);
 
     if (!parser.value(clientIdOpt).isEmpty()) {
