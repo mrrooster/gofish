@@ -6,7 +6,9 @@
 #include "google/googledrive.h"
 #include "google/googledriveobject.h"
 
-#define FUSE_USE_VERSION 31
+#ifndef FUSE_USE_VERSION
+    #define FUSE_USE_VERSION 26
+#endif
 typedef unsigned long   vsize_t;
 typedef long int        register_t;
 #include <fuse.h>
@@ -43,8 +45,6 @@ private:
 
     GoogleDriveObject *getObjectForPath(QString path);
     void validatePath(QString path);
-
-    static void* fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg);
 
     static int fuse_getattr(const char *path, struct stat *stbuf);
 

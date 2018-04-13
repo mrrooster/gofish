@@ -263,12 +263,6 @@ void FuseThread::validatePath(QString path)
     }
 }
 
-void *FuseThread::fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
-{
-    D("In fuse init");
-    cfg->set_gid = cfg->set_uid = 1;
-}
-
 int FuseThread::fuse_getattr(const char *path, struct stat *stbuf)
 {
     return static_cast<FuseThread*>(fuse_get_context()->private_data)->getAttr(path,stbuf);
