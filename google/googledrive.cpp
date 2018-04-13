@@ -71,6 +71,7 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),state(Disconnected)
     connect(handler,&QOAuthHttpServerReplyHandler::tokensReceived,[=](QVariantMap tokens){
         this->auth->setToken(tokens.value("access_token").toString());
         setState(Connected);
+        setRefreshToken(tokens.value("access_token").toString());
         this->auth->resetStatus(QAbstractOAuth::Status::Granted);
     });
 
@@ -96,7 +97,6 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),state(Disconnected)
 
            this->refreshTokenTimer.start(msecs);
 
-           setRefreshToken(this->auth->refreshToken());
            setState(Connected);
            //emit stateChanged(this->state);
         }

@@ -46,6 +46,7 @@ void FuseThread::run()
     fuse_ops->open = FuseThread::fuse_open;
     fuse_ops->read = FuseThread::fuse_read;
     fuse_ops->release = FuseThread::fuse_close;
+    fuse_ops->init    = FuseThread::fuse_init;
 
     fuse_main(this->argc,this->argv,fuse_ops,this);
 //    static struct fuse_operations fuse_ops = {
@@ -260,6 +261,12 @@ void FuseThread::validatePath(QString path)
     if (ptr) {
         ptr->release();
     }
+}
+
+void *FuseThread::fuse_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
+{
+    D("In fuse init");
+    cfg->set_gid = cfg->set_uid = 1;
 }
 
 int FuseThread::fuse_getattr(const char *path, struct stat *stbuf)

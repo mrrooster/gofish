@@ -4,7 +4,16 @@ QT += network networkauth gui
 CONFIG += c++11 console
 CONFIG -= app_bundle
 
-LIBS += -lrefuse
+unix {
+  netbsd-g++ {
+    message(Building for NetBSD)
+    LIBS += -lrefuse
+  } else {
+    LIBS += -lfuse
+    QMAKE_CXXFLAGS += -D_FILE_OFFSET_BITS=64
+  }
+}
+
 
 # The following define makes your compiler emit warnings if you use
 # any feature of Qt which as been marked deprecated (the exact warnings
