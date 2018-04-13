@@ -10,7 +10,7 @@ unix {
     LIBS += -lrefuse
   } else {
     LIBS += -lfuse
-    QMAKE_CXXFLAGS += -D_FILE_OFFSET_BITS=64 -DFUSE_USE_VERSION=31
+    QMAKE_CXXFLAGS += -D_FILE_OFFSET_BITS=64
   }
 }
 
