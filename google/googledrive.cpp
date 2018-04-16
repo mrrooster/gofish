@@ -22,19 +22,15 @@ const QUrl access_token_url("https://www.googleapis.com/oauth2/v4/token");
 const QUrl files_list("https://www.googleapis.com/drive/v3/files");
 const QUrl files_info("https://www.googleapis.com/drive/v3/files/");
 
-GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),state(Disconnected)
+GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(Disconnected)
 {
-    QSettings settings;
-    settings.beginGroup("googledrive");
-
-    QString clientId = settings.value("client_id").toString();
-    QString clientSecret = settings.value("client_secret").toString();
 
     //Operation timer
     connect(&this->operationTimer,&QTimer::timeout,[=]() {
         if (this->queuedOps.isEmpty()) {
             this->operationTimer.stop();
         } else {
+            QMutexLocker lock(&this->oAuthLock);
             QPair<QPair<QUrl,QVariantMap>,std::function<void(QNetworkReply*)>> op = this->queuedOps.takeFirst();
             if (!op.first.second.isEmpty()) {
                 dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op.first.second);
@@ -53,67 +49,11 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),state(Disconnected)
         }
     });
 
-    this->auth    = new GOAuth2AuthorizationCodeFlow(new GoogleNetworkAccessManager(this), this);
-    auto *handler = new QOAuthHttpServerReplyHandler(this);
-    this->auth->setReplyHandler(handler);
-    this->auth->setAuthorizationUrl(auth_url);
-    this->auth->setAccessTokenUrl(access_token_url);
-    this->auth->setClientIdentifier(clientId);
-    this->auth->setClientIdentifierSharedKey(clientSecret);
-    this->auth->setScope("https://www.googleapis.com/auth/drive.readonly");
-
     connect(&this->refreshTokenTimer,&QTimer::timeout,[=]() {
         D("Calling token refresh...");
-        this->auth->refreshToken();
+        authenticate();
     });
-
-    // Handle a refreshed token....
-    connect(handler,&QOAuthHttpServerReplyHandler::tokensReceived,[=](QVariantMap tokens){
-        this->auth->setToken(tokens.value("access_token").toString());
-        setState(Connected);
-        setRefreshToken(tokens.value("refresh_token").toString());
-        this->auth->resetStatus(QAbstractOAuth::Status::Granted);
-    });
-
-    // Rewriting the refresh token request for google
-    this->auth->setModifyParametersFunction([&](QAbstractOAuth::Stage stage, QVariantMap *parameters) {
-        if (stage == QAbstractOAuth::Stage::RefreshingAccessToken) {
-            parameters->insert("client_id",clientId);
-            parameters->insert("client_secret",clientSecret);
-            parameters->remove("redirect_uri");
-        }
-    });
-
-    connect(this->auth, &QAbstractOAuth::statusChanged, [=](
-            QAbstractOAuth::Status status) {
-
-        if (status==QAbstractOAuth::Status::Granted) {
-           D( "Authorised. Starting token refresh timer.");
-
-           quint64 msecs = 600000;
-
-           D("Setting token refresh timer for"<<msecs<<"ms.");
-
-           this->refreshTokenTimer.start(msecs);
-
-           setState(Connected);
-           //emit stateChanged(this->state);
-        }
-    });
-
-    connect(this->auth, &QOAuth2AuthorizationCodeFlow::authorizeWithBrowser, [](const QUrl url) {
-        qInfo() << "Go to: "<<url.toString();
-    });
-
-    this->refreshTokenTimer.setSingleShot(true);
-
-    QString refreshToken = getRefreshToken();
-    if (refreshToken.isEmpty()) {
-        this->auth->grant();
-    } else {
-        this->auth->setRefreshToken(refreshToken);
-        this->auth->refreshAccessToken();
-    }
+    authenticate();
 }
 
 GoogleDrive::~GoogleDrive()
@@ -333,6 +273,14 @@ void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<
     this->operationTimer.start(10);
 }
 
+quint64 GoogleDrive::getInodeForFileId(QString id)
+{
+    if (!this->inodeMap.contains(id)) {
+        this->inodeMap.insert(id,this->inode++);
+    }
+    return this->inodeMap.value(id);
+}
+
 QString GoogleDrive::getRefreshToken()
 {
     QSettings settings;
@@ -340,11 +288,84 @@ QString GoogleDrive::getRefreshToken()
     return settings.value("refresh_token").toString();
 }
 
-void GoogleDrive::setRefreshToken(QString token)
+void GoogleDrive::authenticate()
 {
+    QMutexLocker lock(&this->oAuthLock);
     QSettings settings;
     settings.beginGroup("googledrive");
-    settings.setValue("refresh_token",token);
+
+    QString clientId = settings.value("client_id").toString();
+    QString clientSecret = settings.value("client_secret").toString();
+
+    if (this->auth) {
+        this->auth->deleteLater();
+    }
+    this->auth    = new GOAuth2AuthorizationCodeFlow(new GoogleNetworkAccessManager(this), this);
+    auto *handler = new QOAuthHttpServerReplyHandler(this);
+    this->auth->setReplyHandler(handler);
+    this->auth->setAuthorizationUrl(auth_url);
+    this->auth->setAccessTokenUrl(access_token_url);
+    this->auth->setClientIdentifier(clientId);
+    this->auth->setClientIdentifierSharedKey(clientSecret);
+    this->auth->setScope("https://www.googleapis.com/auth/drive.readonly");
+
+    // Handle a refreshed token....
+    connect(handler,&QOAuthHttpServerReplyHandler::tokensReceived,[=](QVariantMap tokens){
+        this->auth->setToken(tokens.value("access_token").toString());
+        setState(Connected);
+        setRefreshToken(tokens.value("refresh_token").toString());
+        this->auth->resetStatus(QAbstractOAuth::Status::Granted);
+    });
+
+    // Rewriting the refresh token request for google
+    this->auth->setModifyParametersFunction([&](QAbstractOAuth::Stage stage, QVariantMap *parameters) {
+        if (stage == QAbstractOAuth::Stage::RefreshingAccessToken) {
+            parameters->insert("client_id",clientId);
+            parameters->insert("client_secret",clientSecret);
+            parameters->remove("redirect_uri");
+        }
+    });
+
+    connect(this->auth, &QAbstractOAuth::statusChanged, [=](
+            QAbstractOAuth::Status status) {
+
+        if (status==QAbstractOAuth::Status::Granted) {
+           D( "Authorised. Starting token refresh timer.");
+
+           quint64 msecs = 600000;
+
+           D("Setting token refresh timer for"<<msecs<<"ms.");
+
+           this->refreshTokenTimer.start(msecs);
+
+           setState(Connected);
+           //emit stateChanged(this->state);
+        }
+    });
+
+    connect(this->auth, &QOAuth2AuthorizationCodeFlow::authorizeWithBrowser, [](const QUrl url) {
+        qInfo() << "To use this app you must allow it access to your Google drive. To do this plese visit the following URL:\n\n\t"<<url.toString();
+    });
+
+    this->refreshTokenTimer.setSingleShot(true);
+
+    QString refreshToken = getRefreshToken();
+    if (refreshToken.isEmpty()) {
+        this->auth->grant();
+    } else {
+        this->auth->setRefreshToken(refreshToken);
+        this->auth->refreshAccessToken();
+    }
+
+}
+
+void GoogleDrive::setRefreshToken(QString token)
+{
+    if (!token.isEmpty()) {
+        QSettings settings;
+        settings.beginGroup("googledrive");
+        settings.setValue("refresh_token",token);
+    }
 }
 
 void GoogleDrive::setState(GoogleDrive::ConnectionState newState)

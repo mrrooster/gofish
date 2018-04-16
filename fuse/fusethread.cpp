@@ -72,7 +72,7 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
 
     ::memset(stbuf,0,sizeof(struct stat));
 
-    stbuf->st_mode = 0666;
+ //   stbuf->st_mode = 0666;
     stbuf->st_mode= 0555;
     if (item->isFolder()) {
         D("Thingy is dir.");

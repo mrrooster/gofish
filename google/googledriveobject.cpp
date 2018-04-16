@@ -40,6 +40,7 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint64 refreshSecs, Q
     this->size     = size;
     this->ctime    = ctime;
     this->mtime    = mtime;
+    this->inode    = gofish->getInodeForFileId(this->id.isEmpty()?getPath():this->id);
     this->childFolderCount = 0;
     this->usageCount = 0;
     this->refreshSecs= refreshSecs;
@@ -98,7 +99,7 @@ quint64 GoogleDriveObject::getBlockSize()
 
 quint64 GoogleDriveObject::getInode() const
 {
-    return (quint64)this;
+    return this->inode;
 }
 
 QDateTime GoogleDriveObject::getCreatedTime()

@@ -54,6 +54,7 @@ private:
     QDateTime mtime;
     qint64 updated;
     quint32 refreshSecs;
+    quint64 inode;
 
     GoogleDrive *gofish;
     QCache<QString,QByteArray> *cache;
