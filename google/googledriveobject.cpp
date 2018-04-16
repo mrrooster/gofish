@@ -1,5 +1,6 @@
 #include <QDebug>
 #include <QThread>
+#include <QSettings>
 
 #include "googledriveobject.h"
 #include "defaults.h"
@@ -44,6 +45,15 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint64 refreshSecs, Q
     this->childFolderCount = 0;
     this->usageCount = 0;
     this->refreshSecs= refreshSecs;
+
+    QSettings settings;
+    settings.beginGroup("googledrive");
+    quint32 chunkSize = settings.value("download_chunk_bytes",READ_CHUNK_SIZE).toUInt();
+    if (chunkSize>this->cacheChunkSize) {
+        int mult = chunkSize/this->cacheChunkSize;
+        this->readChunkSize = (mult?mult:1)*this->cacheChunkSize;
+        D("Set read size:"<<this->readChunkSize);
+    }
 
     setupConnections();
 

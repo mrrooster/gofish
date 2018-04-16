@@ -26,6 +26,7 @@ int main(int argc, char *argv[])
     QCommandLineOption clientSecretOpt("secret","Set the google client secret, you must do this at least once.","Google client secret");
     QCommandLineOption refreshSecondsOpt("refresh-secs","Set the number of seconds between refreshes, the longer this value is the better performance will be, however remote changes may not become visible.","Seconds");
     QCommandLineOption cacheSizeOpt("cache-bytes","Set the size of the in memory block cache in bytes. More memory good.","Bytes");
+    QCommandLineOption dloadOpt("download-size","How much data to download in each request, this should be roughly a quater of your total download speed.","Bytes");
     QCommandLineOption foregroundOpt("f","Run in the foreground");
     QCommandLineOption optionsOpt("o","Fuse fs options","Options");
 
@@ -36,6 +37,7 @@ int main(int argc, char *argv[])
     parser.addOption(clientSecretOpt);
     parser.addOption(foregroundOpt);
     parser.addOption(cacheSizeOpt);
+    parser.addOption(dloadOpt);
     parser.addOption(refreshSecondsOpt);
     parser.addOption(optionsOpt);
     parser.process(a);
@@ -55,6 +57,11 @@ int main(int argc, char *argv[])
         QSettings settings;
         settings.beginGroup("googledrive");
         settings.setValue("in_memory_cache_bytes",parser.value(cacheSizeOpt));
+    }
+    if (!parser.value(dloadOpt).isNull()) {
+        QSettings settings;
+        settings.beginGroup("googledrive");
+        settings.setValue("download_chunk_bytes",parser.value(dloadOpt));
     }
 
     QSettings settings;
