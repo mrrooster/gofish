@@ -270,7 +270,9 @@ void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
 void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<void(QNetworkReply *)> handler)
 {
     this->queuedOps.append(QPair<QPair<QUrl,QVariantMap>,std::function<void(QNetworkReply*)>>(urlAndHeaders,handler));
-    this->operationTimer.start(10);
+    if (!this->operationTimer.isActive()) {
+        this->operationTimer.start(10);
+    }
 }
 
 quint64 GoogleDrive::getInodeForFileId(QString id)
@@ -344,7 +346,7 @@ void GoogleDrive::authenticate()
     });
 
     connect(this->auth, &QOAuth2AuthorizationCodeFlow::authorizeWithBrowser, [](const QUrl url) {
-        qInfo() << "To use this app you must allow it access to your Google drive. To do this plese visit the following URL:\n\n\t"<<url.toString();
+        qInfo() << QString("To use this app you must allow it access to your Google drive. To do this plese visit the following URL:\n\n\t%1").arg(url.toString());
     });
 
     this->refreshTokenTimer.setSingleShot(true);

@@ -197,16 +197,18 @@ QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
             QByteArray data = this->gofish->getPendingSegment(this->id,readStart,this->readChunkSize);
             D("Got data: ,"<<data.size());
 
-            while(!data.isEmpty()) {
-                QByteArray *cacheEntry = new QByteArray(data.left(this->cacheChunkSize));
-                QString cacheChunkId = QString("%1:%2:%3:%4").arg(this->id).arg(readStart).arg(this->cacheChunkSize).arg(this->mtime.toMSecsSinceEpoch());
-                readStart+=this->cacheChunkSize;
-                data = data.mid(this->cacheChunkSize);
-                this->cache->insert(cacheChunkId,cacheEntry,cacheEntry->size());
-                D("Inserted "<<cacheChunkId<<",of size: "<<cacheEntry->size()<<"into cache.");
-                D("Cache: "<<this->cache->totalCost()<<"of"<<this->cache->maxCost()<<", "<<(this->cache->totalCost()*100/this->cache->maxCost())<<"%");
+            if (!data.isEmpty()) {
+                while(!data.isEmpty()) {
+                    QByteArray *cacheEntry = new QByteArray(data.left(this->cacheChunkSize));
+                    QString cacheChunkId = QString("%1:%2:%3:%4").arg(this->id).arg(readStart).arg(this->cacheChunkSize).arg(this->mtime.toMSecsSinceEpoch());
+                    readStart+=this->cacheChunkSize;
+                    data = data.mid(this->cacheChunkSize);
+                    this->cache->insert(cacheChunkId,cacheEntry,cacheEntry->size());
+                    D("Inserted "<<cacheChunkId<<",of size: "<<cacheEntry->size()<<"into cache.");
+                    D("Cache: "<<this->cache->totalCost()<<"of"<<this->cache->maxCost()<<", "<<(this->cache->totalCost()*100/this->cache->maxCost())<<"%");
+                }
+                retData.append(*this->cache->object(chunkId));
             }
-            retData.append(*this->cache->object(chunkId));
         }
 
         start+=length;
