@@ -117,7 +117,7 @@ QMutex *GoogleDrive::getFileLock(QString fileId)
 void GoogleDrive::addPathToPreFlightList(QString path)
 {
     QMutexLocker lock(&this->preflightLock);
-    if (!this->inflightPaths.contains(path)) {
+    if (!this->preflightPaths.contains(path)) {
         D("Adding path to preflight: "<<path);
         this->preflightPaths.append(path);
     }
@@ -161,10 +161,7 @@ void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)
 {
     QString id = QString("%1:%2:%3").arg(fileId).arg(start).arg(length);
     D("read remote file."<<id);
-    if (this->inflightPaths.contains(id)) {
-        D("Another file request in progress.");
-        return;
-    }
+
 
     getBlockingLock(id)->lock();
     this->inflightPaths.append(id);
