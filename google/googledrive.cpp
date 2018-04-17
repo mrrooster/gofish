@@ -31,17 +31,25 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(
             this->operationTimer.stop();
         } else {
             QMutexLocker lock(&this->oAuthLock);
-            QPair<QPair<QUrl,QVariantMap>,std::function<void(QNetworkReply*)>> op = this->queuedOps.takeFirst();
-            if (!op.first.second.isEmpty()) {
-                dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op.first.second);
+            GoogleDriveOperation *op = this->queuedOps.takeFirst();
+            if (!op->headers.isEmpty()) {
+                dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op->headers);
             }
-            auto response = this->auth->get(op.first.first);
+            auto response = this->auth->get(op->url);
             connect(response,&QNetworkReply::finished,[=]{
-                if (response->error()==QNetworkReply::NoError) {
-                    op.second(response);
+                //D("Got response, bytes avail: "<<response->bytesAvailable());
+                if (response->error()==QNetworkReply::NoError && response->bytesAvailable()>0) {
+                    op->handler(response);
+                    delete op;
                 } else {
                     D("Error: "<<response->errorString());
-                    this->queuedOps.append(op);
+                    op->retryCount++;
+                    if (op->retryCount>10) {
+                        D("Abandoning request due to >10 retries.");
+                        delete op;
+                    } else {
+                        this->queuedOps.append(op);
+                    }
             	    this->operationTimer.start();
                 }
             });
@@ -269,7 +277,13 @@ void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
 
 void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<void(QNetworkReply *)> handler)
 {
-    this->queuedOps.append(QPair<QPair<QUrl,QVariantMap>,std::function<void(QNetworkReply*)>>(urlAndHeaders,handler));
+    GoogleDriveOperation *operation = new GoogleDriveOperation();
+
+    operation->url        = urlAndHeaders.first;
+    operation->headers    = urlAndHeaders.second;
+    operation->handler    = handler;
+    operation->retryCount = 0;
+    this->queuedOps.append(operation);
     if (!this->operationTimer.isActive()) {
         this->operationTimer.start(10);
     }

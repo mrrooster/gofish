@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include "goauth2authorizationcodeflow.h"
+#include "googledriveoperation.h"
 #include <QTimer>
 #include <QVector>
 #include <QJsonValue>
@@ -47,7 +48,7 @@ private:
     QMap<QString,quint64> inodeMap;
     QVector<QString> inflightPaths;
     QVector<QString> preflightPaths;
-    QVector<QPair<QPair<QUrl,QVariantMap>,std::function<void(QNetworkReply*)>>> queuedOps;
+    QVector<GoogleDriveOperation*> queuedOps;
     QMutex preflightLock;
     QMutex oAuthLock;
 
