@@ -346,7 +346,7 @@ void GoogleDrive::authenticate()
     });
 
     connect(this->auth, &QOAuth2AuthorizationCodeFlow::authorizeWithBrowser, [](const QUrl url) {
-        qInfo() << QString("To use this app you must allow it access to your Google drive. To do this plese visit the following URL:\n\n\t%1").arg(url.toString());
+        qInfo() << QString("To use this app you must allow it access to your Google drive. To do this plese visit the following URL:\n\n\t%1\n\nIdeally you should visit this URL on a browser on the machine you are running gofish from. This will allow the callback to work correctly. If you are accessing the machine remotely then see the documentation for the additonal steps required.").arg(url.toString());
     });
 
     this->refreshTokenTimer.setSingleShot(true);
