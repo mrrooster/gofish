@@ -12,7 +12,7 @@ int main(int argc, char *argv[])
 {
     QCoreApplication::setOrganizationDomain("gofish.ohmyno.co.uk");
     QCoreApplication::setApplicationName("GoFiSh");
-    QCoreApplication::setApplicationVersion(QString("gofish %1 build date: %2 %3 %4")
+    QCoreApplication::setApplicationVersion(QString("%1 build date: %2 %3 %4")
                                             .arg("20180409")
                                             .arg(__DATE__)
                                             .arg(QSysInfo::prettyProductName())
@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
     QCommandLineOption foregroundOpt("f","Run in the foreground");
     QCommandLineOption optionsOpt("o","Fuse fs options","Options");
 
-    parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive.");
+    parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive. The refresh-secs, cache-bytes, id, secret and download-bytes options are saved to the settings file, and therefore only need to be specified once.");
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addOption(clientIdOpt);
@@ -40,6 +40,7 @@ int main(int argc, char *argv[])
     parser.addOption(dloadOpt);
     parser.addOption(refreshSecondsOpt);
     parser.addOption(optionsOpt);
+    parser.addPositionalArgument("mountpoint","The mountpoint to use");
     parser.process(a);
 
     if (!parser.value(clientIdOpt).isEmpty()) {
