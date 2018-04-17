@@ -63,7 +63,7 @@ private:
     void readFolder(QString startPath, QString nextPageToken, QString parentId, GoogleDriveObject *target);
     void readFileSection(QString fileId, quint64 start, quint64 length);
 
-    void queueOp(QPair<QUrl,QVariantMap> urlAndHeaders,std::function<void(QNetworkReply*)> handler);
+    void queueOp(QPair<QUrl,QVariantMap> urlAndHeaders,std::function<void(QByteArray)> handler);
 };
 
 #endif // GOOGLEDRIVE_H

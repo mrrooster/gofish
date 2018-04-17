@@ -37,9 +37,9 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(
             }
             auto response = this->auth->get(op->url);
             connect(response,&QNetworkReply::finished,[=]{
-                D("Got response, bytes avail: "<<response->bytesAvailable());
-                if (response->error()==QNetworkReply::NoError && response->bytesAvailable()>0) {
-                    op->handler(response);
+                QByteArray responseData = response->readAll();
+                if (response->error()==QNetworkReply::NoError && !responseData.isEmpty()) {
+                    op->handler(responseData);
                     delete op;
                 } else {
                     D("Error: "<<response->errorString());
@@ -52,6 +52,7 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(
                     }
             	    this->operationTimer.start();
                 }
+                response->deleteLater();
             });
             this->operationTimer.start();
         }
@@ -192,8 +193,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     }
     query += "&fields=files(name,size,mimeType,id,kind,createdTime,modifiedTime)";
     url.setQuery(query);
-    queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QNetworkReply *response){
-        QByteArray responseData = response->readAll();
+    queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QByteArray responseData){
         //D("Read file response data:"<<responseData);
         QJsonDocument doc = QJsonDocument::fromJson(responseData);
         //D("Got response:"<<doc);
@@ -265,8 +265,7 @@ void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
 
     extraHeaders.insert("Range",QString("bytes=%1-%2").arg(start).arg(start+length-1));
 
-    queueOp(QPair<QUrl,QVariantMap>(url,extraHeaders),[=](QNetworkReply *response){
-        QByteArray responseData = response->readAll();
+    queueOp(QPair<QUrl,QVariantMap>(url,extraHeaders),[=](QByteArray responseData){
         this->pendingSegments.insert(id,responseData);
         D("Got file section response."<<responseData.size()<<responseData.left(200));
         this->inflightPaths.removeOne(id);
@@ -275,7 +274,7 @@ void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
     });
 }
 
-void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<void(QNetworkReply *)> handler)
+void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<void(QByteArray)> handler)
 {
     GoogleDriveOperation *operation = new GoogleDriveOperation();
 
