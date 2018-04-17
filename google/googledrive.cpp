@@ -300,7 +300,7 @@ void GoogleDrive::authenticate()
     QString clientSecret = settings.value("client_secret").toString();
 
     if (this->auth) {
-        this->auth->deleteLater();
+        QTimer::singleShot(600000,this->auth,&QObject::deleteLater);
     }
     this->auth    = new GOAuth2AuthorizationCodeFlow(new GoogleNetworkAccessManager(this), this);
     auto *handler = new QOAuthHttpServerReplyHandler(this);
