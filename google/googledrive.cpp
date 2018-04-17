@@ -37,7 +37,7 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(
             }
             auto response = this->auth->get(op->url);
             connect(response,&QNetworkReply::finished,[=]{
-                //D("Got response, bytes avail: "<<response->bytesAvailable());
+                D("Got response, bytes avail: "<<response->bytesAvailable());
                 if (response->error()==QNetworkReply::NoError && response->bytesAvailable()>0) {
                     op->handler(response);
                     delete op;
@@ -268,7 +268,7 @@ void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
     queueOp(QPair<QUrl,QVariantMap>(url,extraHeaders),[=](QNetworkReply *response){
         QByteArray responseData = response->readAll();
         this->pendingSegments.insert(id,responseData);
-        D("Got file section response."<<responseData.size());
+        D("Got file section response."<<responseData.size()<<responseData.left(200));
         this->inflightPaths.removeOne(id);
         D("Releasing lock (file)"<<id);
         getBlockingLock(id)->unlock();
