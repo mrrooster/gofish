@@ -189,6 +189,8 @@ QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
     quint64 length = totalLength<this->cacheChunkSize ? totalLength:this->cacheChunkSize;
     quint64 readStart = start;
 
+    D("Read:"<<start<<totalLength<<getPath());
+
     while(totalLength>0) {
         QString chunkId = QString("%1:%2:%3:%4").arg(this->id).arg(start).arg(this->cacheChunkSize).arg(this->mtime.toMSecsSinceEpoch());
 
@@ -224,7 +226,7 @@ QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
                     }
                     this->cache->insert(cacheChunkId,cacheEntry,cost);
                     D("Inserted "<<cacheChunkId<<",of size: "<<cacheEntry->size()<<"into cache.");
-                    D("Cache: "<<this->cache->totalCost()<<"of"<<this->cache->maxCost()<<", "<<(this->cache->maxCost()*100/this->cache->totalCost())<<"%");
+                    D("Cache: "<<this->cache->totalCost()<<"of"<<this->cache->maxCost()<<", "<<(((quint64)this->cache->totalCost())*100/((quint64)this->cache->maxCost()))<<"%");
                 }
                 retData.append(*this->cache->object(chunkId));
             }
@@ -235,7 +237,7 @@ QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
         length = totalLength<this->cacheChunkSize ? totalLength:this->cacheChunkSize;
     }
 
-    D("Returning data size:"<<retData.size());
+    D("Returning data size:"<<retData.size()<<getPath());
     release();
     return retData;
 }
