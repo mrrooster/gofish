@@ -11,7 +11,7 @@ class GoogleDriveObject : public QObject
 {
     Q_OBJECT
 public:
-    explicit GoogleDriveObject(GoogleDrive *gofish, quint32 cacheSize, quint32 refreshSecs, QObject *parent = nullptr);
+    explicit GoogleDriveObject(GoogleDrive *gofish, quint64 cacheSize, quint32 refreshSecs, QObject *parent = nullptr);
     explicit GoogleDriveObject(GoogleDrive *gofish, quint64 refreshSecs, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent=nullptr);
     ~GoogleDriveObject();
 
@@ -20,7 +20,7 @@ public:
     QString getPath() const;
     QString getMimeType() const;
     quint64 getSize() const;
-    quint64 getChildFolderCount() const;
+    quint64 getChildFolderCount();
     quint64 getBlockSize();
     quint64 getInode() const;
     QDateTime getCreatedTime();

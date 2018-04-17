@@ -33,7 +33,7 @@ void FuseThread::run()
 
     this->root  = new GoogleDriveObject(
                 this->gofish,
-                settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toUInt(),
+                settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong(),
                 settings.value("refresh_seconds",600).toUInt()
                 );
 
@@ -113,6 +113,10 @@ int FuseThread::openDir(const char *path, struct fuse_file_info *fi)
 {
     D("In opendir"<<path);
     GoogleDriveObject *obj = getObjectForPath(path);
+    if (obj) {
+        obj->lock();
+        obj->getChildFolderCount();
+    }
     fi->fh = reinterpret_cast<quint64>(obj);
     return obj?0:-ENOENT;
     return 0;
@@ -169,7 +173,7 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
     char *ptr=buf;
     quint64 chunkStart = (start/blockSize) * blockSize;
 
-    if (item) {
+    if (item && !item->isFolder()) {
         while (size>0) {
             D("Start: "<<start<<", chunkstart: "<<chunkStart<<", size: "<<size);
 
