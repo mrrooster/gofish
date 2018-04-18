@@ -179,8 +179,8 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
 
             // read a chunk
             QByteArray data = item->read(chunkStart,blockSize);
-
-            Q_ASSERT(!data.isEmpty());
+            QByteArray where = QString("%1 _ %2 _ %3").arg(path).arg(chunkStart).arg(blockSize).toLocal8Bit();
+            Q_ASSERT_X(!data.isEmpty(),"read",where.data());
 
             D("Got returned data, size: "<<data.size());
 
