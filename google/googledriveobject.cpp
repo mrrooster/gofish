@@ -140,10 +140,11 @@ QVector<GoogleDriveObject *> GoogleDriveObject::getChildren()
     QString fullPath = getPath();
     D("In get children of: "<<fullPath);
     if (this->isFolder() && (!this->populated || (currentSecs-this->updated)>getRefreshSecs())) {
-        this->gofish->addPathToPreFlightList(fullPath);
-        emit readFolder(fullPath,this->id.isEmpty()?"root":this->id,this);
+        quint64 requestToken = this->gofish->addPathToPreFlightList(fullPath);
+        D("Get child request token:"<<requestToken);
+        emit readFolder(fullPath,this->id.isEmpty()?"root":this->id,this,requestToken);
         QThread::yieldCurrentThread();
-        while(this->gofish->pathInPreflight(fullPath)) {
+        while(this->gofish->pathInPreflight(requestToken)) {
             QThread::yieldCurrentThread();
         }
         D("Getting lock...");
@@ -201,10 +202,10 @@ QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
             retData.append(*this->cache->object(chunkId));
         } else if (!this->isFolder()) {
             QString readChunkId = QString("%1:%2:%3").arg(this->id).arg(readStart).arg(this->readChunkSize);
-            this->gofish->addPathToPreFlightList(readChunkId);
-            emit readData(this->id,readStart,this->readChunkSize);
+            quint64 requestToken = this->gofish->addPathToPreFlightList(readChunkId);
+            emit readData(this->id,readStart,this->readChunkSize,requestToken);
             QThread::yieldCurrentThread();
-            while(this->gofish->pathInPreflight(readChunkId)) {
+            while(this->gofish->pathInPreflight(requestToken)) {
                 QThread::yieldCurrentThread();
             }
             D("Getting lock for file..."<<readChunkId);

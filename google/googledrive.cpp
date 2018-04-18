@@ -77,7 +77,7 @@ GoogleDrive::~GoogleDrive()
     }
 }
 
-void GoogleDrive::readRemoteFolder(QString path, QString parentId, GoogleDriveObject *target)
+void GoogleDrive::readRemoteFolder(QString path, QString parentId, GoogleDriveObject *target, quint64 token)
 {
     D("read remote folder."<<path);
     if (this->inflightPaths.contains(path)) {
@@ -93,7 +93,7 @@ void GoogleDrive::readRemoteFolder(QString path, QString parentId, GoogleDriveOb
     mtex->lock();
     this->inflightPaths.append(path);
     D("Removing path from preflight: "<<path<<mtex);
-    this->preflightPaths.removeOne(path);
+    this->preflightPaths.removeOne(token);
     D("read remote folder.. locked."<<path);
     readFolder(path,"",parentId,target);
 }
@@ -114,19 +114,19 @@ QMutex *GoogleDrive::getFileLock(QString fileId)
     return this->fileLocks.value(fileId);
 }
 
-void GoogleDrive::addPathToPreFlightList(QString path)
+quint64 GoogleDrive::addPathToPreFlightList(QString path)
 {
     QMutexLocker lock(&this->preflightLock);
-    if (!this->preflightPaths.contains(path)) {
-        D("Adding path to preflight: "<<path);
-        this->preflightPaths.append(path);
-    }
+    quint64 token = this->requestToken++;
+    D("Preflight path:"<<path<<", token:"<<token);
+    this->preflightPaths.append(token);
+    return token;
 }
 
-bool GoogleDrive::pathInPreflight(QString path)
+bool GoogleDrive::pathInPreflight(quint64 token)
 {
     QMutexLocker lock(&this->preflightLock);
-    return this->preflightPaths.contains(path);
+    return this->preflightPaths.contains(token);
 }
 
 bool GoogleDrive::pathInFlight(QString path)
@@ -157,7 +157,7 @@ quint64 GoogleDrive::getInMemoryCacheSizeBytes()
     return settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong();
 }
 
-void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)
+void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length, quint64 token)
 {
     QString id = QString("%1:%2:%3").arg(fileId).arg(start).arg(length);
     D("read remote file."<<id);
@@ -165,8 +165,8 @@ void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)
 
     getBlockingLock(id)->lock();
     this->inflightPaths.append(id);
-    D("Removing path from preflight: "<<id);
-    this->preflightPaths.removeOne(id);
+    D("Removing path from preflight: "<<token);
+    this->preflightPaths.removeOne(token);
     D("read remote file.. locked."<<id);
     //readFolder(path,path,"","");
     readFileSection(fileId,start,length);

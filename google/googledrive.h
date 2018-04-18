@@ -22,8 +22,8 @@ public:
 
     QMutex *getBlockingLock(QString folder);
     QMutex *getFileLock(QString fileId);
-    void addPathToPreFlightList(QString path);
-    bool pathInPreflight(QString path);
+    quint64 addPathToPreFlightList(QString path);
+    bool pathInPreflight(quint64 token);
     bool pathInFlight(QString path);
     QByteArray getPendingSegment(QString fileId, quint64 start, quint64 length);
     unsigned int getRefreshSeconds();
@@ -34,11 +34,12 @@ signals:
     void stateChanged(ConnectionState newState);
 
 public slots:
-    void readRemoteFolder(QString path, QString parentId, GoogleDriveObject *target);
-    void getFileContents(QString fileId, quint64 start, quint64 length);
+    void readRemoteFolder(QString path, QString parentId, GoogleDriveObject *target,quint64 token);
+    void getFileContents(QString fileId, quint64 start, quint64 length,quint64 token);
 
 private:
     quint64 inode;
+    quint64 requestToken;
     GOAuth2AuthorizationCodeFlow *auth;
     QTimer refreshTokenTimer;
     QTimer operationTimer;
@@ -47,7 +48,7 @@ private:
     QMap<QString,QByteArray> pendingSegments;
     QMap<QString,quint64> inodeMap;
     QVector<QString> inflightPaths;
-    QVector<QString> preflightPaths;
+    QVector<quint64> preflightPaths;
     QVector<GoogleDriveOperation*> queuedOps;
     QMutex preflightLock;
     QMutex oAuthLock;

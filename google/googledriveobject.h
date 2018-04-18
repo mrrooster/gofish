@@ -35,8 +35,8 @@ public:
 
 //    void operator =(const GoogleDriveObject &other);
 signals:
-    void readFolder(QString folder, QString parentId, GoogleDriveObject *into);
-    void readData(QString fileId, quint64 start, quint64 offset);
+    void readFolder(QString folder, QString parentId, GoogleDriveObject *into, quint64 requestToken);
+    void readData(QString fileId, quint64 start, quint64 offset, quint64 requestToken);
 
 private:
     int usageCount;
