@@ -58,6 +58,7 @@ private:
 
     GoogleDrive *gofish;
     QCache<QString,QByteArray> *cache;
+    static QMutex cacheLock;
     QVector<GoogleDriveObject*> contents;
 
     void setupConnections();

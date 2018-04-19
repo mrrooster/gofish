@@ -16,6 +16,8 @@
 #define SD(x)
 #endif
 
+QMutex GoogleDriveObject::cacheLock;
+
 GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint64 cacheSize, quint32 refreshSecs, QObject *parent) :
     GoogleDriveObject::GoogleDriveObject(gofish,refreshSecs,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),new QCache<QString,QByteArray>((cacheSize/1024)?(cacheSize/1024):1),parent)
 {
@@ -193,7 +195,9 @@ QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
     D("Read:"<<start<<totalLength<<getPath());
 
     while(totalLength>0) {
-        QString chunkId = QString("%1:%2:%3:%4").arg(this->id).arg(start).arg(this->cacheChunkSize).arg(this->mtime.toMSecsSinceEpoch());
+        quint64 msecs = this->mtime.toMSecsSinceEpoch();
+        QString chunkId = QString("%1:%2:%3:%4").arg(this->id).arg(start).arg(this->cacheChunkSize).arg(msecs);
+        QMutexLocker cacheLocker(&GoogleDriveObject::cacheLock);
 
         D("READ chunk id:"<<chunkId);
 
@@ -218,18 +222,20 @@ QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
             if (!data.isEmpty()) {
                 while(!data.isEmpty()) {
                     QByteArray *cacheEntry = new QByteArray(data.left(this->cacheChunkSize));
-                    QString cacheChunkId = QString("%1:%2:%3:%4").arg(this->id).arg(readStart).arg(this->cacheChunkSize).arg(this->mtime.toMSecsSinceEpoch());
+                    QString cacheChunkId = QString("%1:%2:%3:%4").arg(this->id).arg(readStart).arg(this->cacheChunkSize).arg(msecs);
                     readStart+=this->cacheChunkSize;
                     data = data.mid(this->cacheChunkSize);
                     int cost = cacheEntry->size()/1024;
                     if (cost==0) {
                         cost=1;
                     }
+                    if (chunkId == cacheChunkId) {
+                        retData.append(*cacheEntry);
+                    }
                     this->cache->insert(cacheChunkId,cacheEntry,cost);
                     D("Inserted "<<cacheChunkId<<",of size: "<<cacheEntry->size()<<"into cache.");
                     D("Cache: "<<this->cache->totalCost()<<"of"<<this->cache->maxCost()<<", "<<(((quint64)this->cache->totalCost())*100/((quint64)this->cache->maxCost()))<<"%");
                 }
-                retData.append(*this->cache->object(chunkId));
             }
         }
 
