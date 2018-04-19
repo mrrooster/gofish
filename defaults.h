@@ -7,6 +7,7 @@
 #define CACHE_CHUNK_SIZE (1024*64)   // Cache 64k 'blocks'
 
 #define DEFAULT_CACHE_SIZE (1024*1024*128) // 128mb
+#define DEFAULT_REFRESH_SECS 600
 
 
 #endif // DEFAULTS_H

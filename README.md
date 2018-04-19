@@ -20,7 +20,7 @@ Once you have a google client ID and client secret you can run gofish for the fi
 
 The first time you run it you will be given a URL to visit. You should ideally visit this using a browser on the machine you're running gofish from, as the URL has a callback that tells gofish it's authorised.
 
-However, if this isn't possible, visit the URL on another machie, and when you have given 'gofish' access to your google drive you'll get redirected to a localhost URL that will 404.
+However, if this isn't possible, visit the URL on another machine, and when you have given 'gofish' access to your google drive you'll get redirected to a localhost URL that will 404.
 
 At this point change the 'localhost' section of the URL in your browser to the IP or hostname of the machine you're running gofish on. This should cause the callback to work as expected.
 
@@ -47,9 +47,9 @@ There are a few options you can tune to improve performance:
 
 |Option|Description|
 |--|--|
-|_refresh-secs_|This controls how long directoy information is cached for. If your drive contents don't change that often you can set this to a high value to reduce the number of reads from Google.|
-|_cache-bytes_|This controls how many bytes the in memory block cache uses, currently this is limited to 2GiB.|
-|_download-size_|This sets the amount of data that is downloaded in one request. You can probably leave this at it's default of 2MiB, however if you have a much faster or slower connection you may wish to change this. A good rule of thumb is about a quater of whatever your internet speed is. So if you can download at 1MiB/sec you should probably set this to 256K. The value is in bytes so this would be 262144.|
+|_refresh-secs_|This controls how long directory information is cached for. If your drive contents don't change that often you can set this to a high value to reduce the number of reads from Google. The default is 600 seconds.|
+|_cache-bytes_|This controls how many bytes the in memory block cache uses. The default is 128MB.|
+|_download-size_|This sets the amount of data that is downloaded in one request. You can probably leave this at it's default of 2MiB, however if you have a much faster or slower connection you may wish to change this. A good rule of thumb is about a quarter of whatever your internet speed is. So if you can download at 1MiB/sec you should probably set this to 256K. The value is in bytes. For example 256K this would be 262144.|
 
 There's a few others too (-h is your friend. :) ):
 

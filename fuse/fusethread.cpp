@@ -34,7 +34,7 @@ void FuseThread::run()
     this->root  = new GoogleDriveObject(
                 this->gofish,
                 settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong(),
-                settings.value("refresh_seconds",600).toUInt()
+                settings.value("refresh_seconds",DEFAULT_REFRESH_SECS).toUInt()
                 );
 
     struct fuse_operations *fuse_ops = new fuse_operations();
