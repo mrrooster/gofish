@@ -55,6 +55,7 @@ private:
     qint64 updated;
     quint32 refreshSecs;
     quint64 inode;
+    QMutex childrenRefreshLock;
 
     GoogleDrive *gofish;
     QCache<QString,QByteArray> *cache;

@@ -138,6 +138,7 @@ QDateTime GoogleDriveObject::getModifiedTime()
 QVector<GoogleDriveObject *> GoogleDriveObject::getChildren()
 {
     lock();
+    QMutexLocker locker(&this->childrenRefreshLock);
     qint64 currentSecs = QDateTime::currentSecsSinceEpoch();
     QString fullPath = getPath();
     D("In get children of: "<<fullPath);
