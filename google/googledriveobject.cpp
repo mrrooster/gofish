@@ -96,7 +96,10 @@ quint64 GoogleDriveObject::getChildFolderCount()
 {
     lock();
     if (this->isFolder() && !this->populated) {
-        getChildren();
+        QVector<GoogleDriveObject *> children = getChildren();
+        for(auto it=children.begin(),end=children.end();it!=end;it++) {
+            (*it)->release();
+        }
     }
     release();
     return this->childFolderCount;
@@ -261,62 +264,8 @@ QCache<QString, QByteArray> *GoogleDriveObject::getCache() const
     return this->cache;
 }
 
-//void GoogleDriveObject::operator =(const GoogleDriveObject &other)
-//{
-//    this->cache = other.cache;
-//    this->cacheChunkSize = other.cacheChunkSize;
-//    this->readChunkSize = other.readChunkSize;
-//    this->populated = other.populated;
-//    this->contents = other.contents;
-//    this->updated = other.updated;
-//    this->gofish = other.gofish;
-//    this->id = other.id;
-//    this->size = other.size;
-//    this->path = other.path;
-//    this->mimeType = other.mimeType;
-//    this->name = other.name;
-//    this->mtime = other.mtime;
-//    this->ctime = other.ctime;
-//    setupConnections();
-//}
-
 void GoogleDriveObject::setupConnections()
 {
-//    connect(this->gofish,&GoogleDrive::folderContents,[=](QString path, QVector<QVariantMap> files){
-//        QString myPath = this->getPath();
-
-//        if (myPath==path) {
-//            D("Got dir info::"<<path<<myPath);
-//            this->contents.clear();
-//            this->childFolderCount=0;
-//            for(int idx=0;idx<files.size();idx++) {
-//                QVariantMap file = files.at(idx);
-////                D("File: "<<file);
-
-//                GoogleDriveObject newObj(
-//                            this->gofish,
-//                            file["id"].toString(),
-//                            path,
-//                            file["name"].toString(),
-//                            file["mimeType"].toString(),
-//                            file["size"].toULongLong(),
-//                            QDateTime::fromString(file["createdTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
-//                            QDateTime::fromString(file["modifiedTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
-//                            this->cache
-//                           );
-
-//                if (newObj.isFolder()) {
-//                    this->childFolderCount++;
-//                }
-
-//                this->contents.append(newObj);
-//            }
-//            this->updated = QDateTime::currentSecsSinceEpoch();
-//            this->populated=true;
-//        }
-
-//    });
-
     connect(this,&GoogleDriveObject::readFolder,this->gofish,&GoogleDrive::readRemoteFolder);
     connect(this,&GoogleDriveObject::readData,this->gofish,&GoogleDrive::getFileContents);
 }
