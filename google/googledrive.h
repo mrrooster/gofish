@@ -21,7 +21,6 @@ public:
     ~GoogleDrive();
 
     QMutex *getBlockingLock(QString folder);
-    QMutex *getFileLock(QString fileId);
     quint64 addPathToPreFlightList(QString path);
     bool pathInPreflight(quint64 token);
     bool pathInFlight(QString path);
@@ -52,9 +51,10 @@ private:
     QVector<GoogleDriveOperation*> queuedOps;
     QMutex preflightLock;
     QMutex oAuthLock;
+    QMutex blockingLocksLock;
 
     QMap<QString,QMutex*> blockingLocks;
-    QMap<QString,QMutex*> fileLocks;
+    QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;
 
     QString getRefreshToken();
     void authenticate();
@@ -65,6 +65,9 @@ private:
     void readFileSection(QString fileId, quint64 start, quint64 length);
 
     void queueOp(QPair<QUrl,QVariantMap> urlAndHeaders,std::function<void(QByteArray)> handler);
+private slots:
+    void operationTimerFired();
+    void requestFinished(QNetworkReply *response);
 };
 
 #endif // GOOGLEDRIVE_H
