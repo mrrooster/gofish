@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include <QString>
 #include <QThread>
 #include <QSettings>
 #include <QCommandLineParser>
@@ -75,11 +76,32 @@ and 'secret' options.";
         return 1;
     }
 
+    QStringList fuseArgs = parser.positionalArguments();
+    QVector<QByteArray> fuseArgsData;
+    fuseArgsData.append(argv[0]);
+    if (fuseArgs.size()!=1) {
+        parser.showHelp(1);
+    }
+    if (parser.isSet(foregroundOpt)) {
+        fuseArgsData.append("-f");
+    }
+    if (parser.isSet(optionsOpt)) {
+        fuseArgsData.append("-o");
+        fuseArgsData.append(parser.value(optionsOpt).toLocal8Bit());
+    }
+    fuseArgsData.append(fuseArgs.first().toLocal8Bit());
+
+    char **fuse_argv = new char*[fuseArgsData.size()];
+    int fuse_argc = fuseArgsData.size();
+    for(int x=0;x<fuse_argc;x++) {
+        fuse_argv[x]=const_cast<char*>(fuseArgsData.at(x).data());
+    }
+
     GoogleDrive googledrive;
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {
             qDebug() << "Drive connected, starting fuse thread...";
-            FuseThread *thread = new FuseThread(argc,argv,&googledrive);
+            FuseThread *thread = new FuseThread(fuse_argc,fuse_argv,&googledrive);
             QObject::connect(thread,&FuseThread::finished,thread,&FuseThread::deleteLater);
             QObject::connect(thread,&FuseThread::finished,&googledrive,&FuseThread::deleteLater);
             thread->start();

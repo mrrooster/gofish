@@ -14,6 +14,9 @@ unix {
   }
 }
 
+!CONFIG(debug, debug|release) {
+    DEFINES += QT_NO_DEBUG_OUTPUT #QT_NO_WARNING_OUTPUT
+}
 
 # The following define makes your compiler emit warnings if you use
 # any feature of Qt which as been marked deprecated (the exact warnings
