@@ -183,7 +183,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                                     target->getRefreshSecs(),
                                     file["id"].toString(),
                                     startPath,
-                                    file["name"].toString(),
+                                    sanitizeFilename(file["name"].toString()),
                                     file["mimeType"].toString(),
                                     file["size"].toULongLong(),
                                     QDateTime::fromString(file["createdTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
@@ -302,6 +302,11 @@ QString GoogleDrive::getRefreshToken()
     QSettings settings;
     settings.beginGroup("googledrive");
     return settings.value("refresh_token").toString();
+}
+
+QString GoogleDrive::sanitizeFilename(QString path)
+{
+    return path.replace(QRegExp("[:]"),"_");
 }
 
 void GoogleDrive::authenticate()

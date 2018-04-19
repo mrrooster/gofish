@@ -57,6 +57,7 @@ private:
     QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;
 
     QString getRefreshToken();
+    QString sanitizeFilename(QString path);
     void authenticate();
     void setRefreshToken(QString token);
     void setState(ConnectionState newState);
