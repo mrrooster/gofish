@@ -9,6 +9,7 @@
 #endif
 typedef unsigned long   vsize_t;
 typedef long int        register_t;
+#include <fuse.h>
 #include <fuse_lowlevel.h>
 #include <unistd.h>
 

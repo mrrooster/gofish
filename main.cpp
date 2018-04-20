@@ -144,7 +144,7 @@ and 'secret' options.";
     FuseHandler *fuse;
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {
-            fuse = new FuseHandler(fuse_artc,fuse_argv,&googledrive);
+            fuse = new FuseHandler(fuse_argc,fuse_argv,&googledrive);
             /*
             qDebug() << "Drive connected, starting fuse thread...";
             FuseThread *thread = new FuseThread(fuse_argc,fuse_argv,&googledrive);
