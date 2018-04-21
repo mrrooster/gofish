@@ -22,21 +22,22 @@ FuseThread::FuseThread(int argc, char *argv[],GoogleDrive *gofish, QObject *pare
     this->user   = ::getuid();
     this->group  = ::getgid();
     this->gofish = gofish;
+    this->root   = nullptr;
+    this->cache  = nullptr;
+
+    QSettings settings;
+    settings.beginGroup("googledrive");
+    quint64 refreshSecs = settings.value("refresh_seconds",DEFAULT_REFRESH_SECS).toUInt();
+
+    connect(&this->refreshTimer,&QTimer::timeout,this,&FuseThread::setupRoot);
+    this->refreshTimer.setSingleShot(false);
+    this->refreshTimer.start(refreshSecs*1000);
+    qInfo() << QString("Refreshing directory every %1 seconds.").arg(refreshSecs);
 }
 
 void FuseThread::run()
 {
     D("In fuse thread...");
-
-    QSettings settings;
-    settings.beginGroup("googledrive");
-
-    this->root  = new GoogleDriveObject(
-                this->gofish,
-                settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong(),
-                settings.value("refresh_seconds",DEFAULT_REFRESH_SECS).toUInt()
-                );
-
     struct fuse_operations *fuse_ops = new fuse_operations();
 
     fuse_ops->getattr = FuseThread::fuse_getattr;
@@ -47,16 +48,9 @@ void FuseThread::run()
     fuse_ops->read = FuseThread::fuse_read;
     fuse_ops->release = FuseThread::fuse_close;
 
+    setupRoot();
+
     fuse_main(this->argc,this->argv,fuse_ops,this);
-//    static struct fuse_operations fuse_ops = {
-//        .getattr	,
-//        .opendir    = FuseThread::fuse_opendir,
-//        .readdir    = FuseThread::fuse_readdir,
-//        .releasedir = FuseThread::fuse_closedir,
-//        .open		= FuseThread::fuse_open,
-//        .read		= FuseThread::fuse_read,
-//        .release    = FuseThread::fuse_close
-    //    };
 }
 
 int FuseThread::getAttr(const char *path, struct stat *stbuf)
@@ -103,8 +97,6 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
     stbuf->st_gid = this->group;
     //stbuf->st
 
-    item->release();
-
     D("Leaving getattr:"<<path);
     return 0;
 }
@@ -114,18 +106,15 @@ int FuseThread::openDir(const char *path, struct fuse_file_info *fi)
     D("In opendir"<<path);
     GoogleDriveObject *obj = getObjectForPath(path);
     if (obj) {
-        obj->lock();
         obj->getChildFolderCount();
     }
-    fi->fh = reinterpret_cast<quint64>(obj);
     return obj?0:-ENOENT;
-    return 0;
 }
 
 int FuseThread::readDir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
 {
     D("In readDir... "<<path);
-    GoogleDriveObject *object = reinterpret_cast<GoogleDriveObject*>(fi->fh);
+    GoogleDriveObject *object = getObjectForPath(path);
     if (!object) {
         D("reddir - Did not get object for path:"<<path);
         return -ENOENT;
@@ -138,7 +127,6 @@ int FuseThread::readDir(const char *path, void *buf, fuse_fill_dir_t filler, off
         if(ret==0 && filler(buf,child->getName().toUtf8().constData(),0,0)) {
             ret = -ENOMEM;
         }
-        child->release();
     }
     return ret;
 }
@@ -146,10 +134,7 @@ int FuseThread::readDir(const char *path, void *buf, fuse_fill_dir_t filler, off
 int FuseThread::closeDir(const char *path, struct fuse_file_info *fi)
 {
     D("In closedir:"<<path);
-    GoogleDriveObject *item = reinterpret_cast<GoogleDriveObject*>(fi->fh);
-    if (item) {
-        item->release();
-    }
+    GoogleDriveObject *item = getObjectForPath(path);
     return (item)?0:-ENOENT;
 }
 
@@ -157,7 +142,6 @@ int FuseThread::open(const char *path, struct fuse_file_info *fi)
 {
     D("In open"<<path);
     GoogleDriveObject *obj = getObjectForPath(path);
-    fi->fh = reinterpret_cast<quint64>(obj);
     return obj?0:-ENOENT;
 }
 
@@ -165,7 +149,7 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
 {
     D("In read"<<path<<", offset:"<<offset<<", size:"<<size);
 
-    GoogleDriveObject *item = reinterpret_cast<GoogleDriveObject*>(fi->fh);
+    GoogleDriveObject *item = getObjectForPath(path);
 
     quint64 blockSize = item->getBlockSize();
     quint64 start = offset;
@@ -210,24 +194,19 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
     return readCount;
 }
 
-int FuseThread::close(const char *, fuse_file_info *fi)
+int FuseThread::close(const char *path, fuse_file_info *fi)
 {
-    GoogleDriveObject *item = reinterpret_cast<GoogleDriveObject*>(fi->fh);
-    if (item) {
-        item->release();
-    }
-    return (item)?0:-ENOENT;
+    return (getObjectForPath(path))?0:-ENOENT;
 }
 
 GoogleDriveObject *FuseThread::getObjectForPath(QString path)
 {
+    QMutexLocker locker(&this->rootSwapLock);
     D("Get object for path: "<<path);
 
     GoogleDriveObject *ret = this->root;
 
     path = path.mid(1); // Strip off the initial slash
-
-    ret->lock();
 
     while(!path.isEmpty() && ret) {
         QString item = path.left(path.indexOf('/'));
@@ -247,11 +226,8 @@ GoogleDriveObject *FuseThread::getObjectForPath(QString path)
             if (!childItem && child->getName()==item) {
 //                D("Found!");
                 childItem = child;
-            } else {
-                child->release();
             }
         }
-        ret->release();
         ret = childItem;
     }
     D("Returning item:"<<(ret?ret->getName():"--NONE--"));
@@ -260,10 +236,33 @@ GoogleDriveObject *FuseThread::getObjectForPath(QString path)
 
 void FuseThread::validatePath(QString path)
 {
-    auto *ptr = getObjectForPath(path);
-    if (ptr) {
-        ptr->release();
+    getObjectForPath(path);
+}
+
+void FuseThread::setupRoot()
+{
+    QMutexLocker locker(&this->rootSwapLock);
+    D("Refreshing root folder.");
+
+    if (this->cache == nullptr) {
+        QSettings settings;
+        settings.beginGroup("googledrive");
+        quint64 cacheSize = settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong()/1024;
+
+        if (cacheSize<(CACHE_CHUNK_SIZE/1024)) {
+            cacheSize = (CACHE_CHUNK_SIZE/1024);
+        }
+        qInfo() << QString("Using in memory cache of %1MiB").arg(cacheSize/1024);
+        this->cache = new QCache<QString,QByteArray>(cacheSize);
     }
+
+    if (this->root) {
+        QTimer::singleShot(600000,this->root,&QObject::deleteLater);
+    }
+    this->root  = new GoogleDriveObject(
+                this->gofish,
+                this->cache
+                );
 }
 
 int FuseThread::fuse_getattr(const char *path, struct stat *stbuf)

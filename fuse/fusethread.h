@@ -30,7 +30,7 @@ public:
 
     int open(const char *path, struct fuse_file_info *fi);
     int read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
-    int close(const char *, struct fuse_file_info *fi);
+    int close(const char *path, struct fuse_file_info *fi);
 
 public slots:
 
@@ -42,6 +42,9 @@ private:
     gid_t group;
     GoogleDrive *gofish;
     GoogleDriveObject *root;
+    QCache<QString,QByteArray> *cache;
+    QTimer refreshTimer;
+    QMutex rootSwapLock;
 
     GoogleDriveObject *getObjectForPath(QString path);
     void validatePath(QString path);
@@ -55,6 +58,8 @@ private:
     static int fuse_open(const char *path, struct fuse_file_info *fi);
     static int fuse_close(const char *path, struct fuse_file_info *fi);
     static int fuse_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi);
+private slots:
+    void setupRoot();
 };
 
 #endif // FUSETHREAD_H

@@ -18,15 +18,12 @@
 
 QMutex GoogleDriveObject::cacheLock;
 
-GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint64 cacheSize, quint32 refreshSecs, QObject *parent) :
-    GoogleDriveObject::GoogleDriveObject(gofish,refreshSecs,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),new QCache<QString,QByteArray>((cacheSize/1024)?(cacheSize/1024):1),parent)
+GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QCache<QString, QByteArray> *cache, QObject *parent) :
+    GoogleDriveObject::GoogleDriveObject(gofish,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),cache,parent)
 {
-    lock();
-    qInfo()<<"Using in memory cache of"<<(cacheSize/1024/1024)<<"MiB.";
-    qInfo()<<"Refresh folder contents every"<<refreshSecs<<"seconds.";
 }
 
-GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint64 refreshSecs, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent) :
+GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent) :
     QObject(parent),
     populated(false)
 {
@@ -46,7 +43,6 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, quint64 refreshSecs, Q
     this->inode    = gofish->getInodeForFileId(this->id.isEmpty()?getPath():this->id);
     this->childFolderCount = 0;
     this->usageCount = 0;
-    this->refreshSecs= refreshSecs;
 
     QSettings settings;
     settings.beginGroup("googledrive");
@@ -94,14 +90,9 @@ quint64 GoogleDriveObject::getSize() const
 
 quint64 GoogleDriveObject::getChildFolderCount()
 {
-    lock();
     if (this->isFolder() && !this->populated) {
-        QVector<GoogleDriveObject *> children = getChildren();
-        for(auto it=children.begin(),end=children.end();it!=end;it++) {
-            (*it)->release();
-        }
+        getChildren();
     }
-    release();
     return this->childFolderCount;
 }
 
@@ -134,18 +125,16 @@ QDateTime GoogleDriveObject::getModifiedTime()
 
 /**
  * @brief GoogleDriveObject::getChildren Gets the children of this folder object.
- * @return A list of locked children.
+ * @return A list of children.
  *
- * YOU MUST RELEASE EACH CHILD.
  */
 QVector<GoogleDriveObject *> GoogleDriveObject::getChildren()
 {
-    lock();
     QMutexLocker locker(&this->childrenRefreshLock);
     qint64 currentSecs = QDateTime::currentSecsSinceEpoch();
     QString fullPath = getPath();
     D("In get children of: "<<fullPath);
-    if (this->isFolder() && (!this->populated || (currentSecs-this->updated)>getRefreshSecs())) {
+    if (this->isFolder() && !this->populated) {
         quint64 requestToken = this->gofish->addPathToPreFlightList(fullPath);
         D("Get child request token:"<<requestToken);
         emit readFolder(fullPath,this->id.isEmpty()?"root":this->id,this,requestToken);
@@ -161,21 +150,14 @@ QVector<GoogleDriveObject *> GoogleDriveObject::getChildren()
         this->updated = currentSecs;
         mtx->unlock();
     }
-    QVector<GoogleDriveObject*> oldContents = this->contents;
-    for(auto it = oldContents.begin(),end = oldContents.end();it!=end;it++) {
-        (*it)->lock();
-    }
-    release();
-    return oldContents;
+    return this->contents;
 }
 
 void GoogleDriveObject::setChildren(QVector<GoogleDriveObject *> newChildren)
 {
-    lock();
     this->childFolderCount = 0;
     clearChildren();
     for(auto it = newChildren.begin(),end = newChildren.end();it!=end;it++) {
-        (*it)->lock();
         if ((*it)->isFolder()) {
             this->childFolderCount+=1;
         }
@@ -183,12 +165,10 @@ void GoogleDriveObject::setChildren(QVector<GoogleDriveObject *> newChildren)
     this->contents = newChildren;
     D("Set children, "<<this->childFolderCount<<"folders:"<<getPath());
     this->populated = true;
-    release();
 }
 
 QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
 {
-    lock();
     QByteArray retData;
     //QString fullPath = getPath();
 
@@ -255,7 +235,6 @@ QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
     }
 
     D("Returning data size:"<<retData.size()<<getPath());
-    release();
     return retData;
 }
 
@@ -270,35 +249,13 @@ void GoogleDriveObject::setupConnections()
     connect(this,&GoogleDriveObject::readData,this->gofish,&GoogleDrive::getFileContents);
 }
 
-void GoogleDriveObject::lock()
-{
-    this->usageCount++;
-    //    D("Locked item:"<<this->usageCount);
-}
-
-quint32 GoogleDriveObject::getRefreshSecs()
-{
-   return this->refreshSecs;
-}
-
-void GoogleDriveObject::release()
-{
-    Q_ASSERT(this->usageCount>0);
-    this->usageCount--;
-//    D("Release item: "<<this->usageCount);
-    if (this->usageCount == 0) {
-        // TODO This whole locking and releasing stuff needs work
-        QTimer::singleShot(120000,this,&QObject::deleteLater);
-    }
-}
-
 void GoogleDriveObject::clearChildren()
 {
     this->childFolderCount = 0;
     QVector<GoogleDriveObject*> oldContents = this->contents;
     this->contents.clear();
     for(auto it = oldContents.begin(),end = oldContents.end();it!=end;it++) {
-        (*it)->release();
+        (*it)->deleteLater();
     }
 }
 

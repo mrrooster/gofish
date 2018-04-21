@@ -179,8 +179,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
         //                D("File: "<<file);
 
                         GoogleDriveObject *newObj = new GoogleDriveObject(
-                                    this,
-                                    target->getRefreshSecs(),
+                                    this,                                    
                                     file["id"].toString(),
                                     startPath,
                                     sanitizeFilename(file["name"].toString()),
