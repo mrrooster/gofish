@@ -287,7 +287,8 @@ void GoogleDriveObject::release()
     this->usageCount--;
 //    D("Release item: "<<this->usageCount);
     if (this->usageCount == 0) {
-        this->deleteLater();
+        // TODO This whole locking and releasing stuff needs work
+        QTimer::singleShot(120000,this,&QObject::deleteLater);
     }
 }
 
