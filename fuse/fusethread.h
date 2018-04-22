@@ -24,13 +24,13 @@ public:
 
     int getAttr(const char *path, struct stat *stbuf);
 
-    int openDir(const char *path, struct fuse_file_info *fi);
-    int readDir(const char *path, void *buf,fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi);
-    int closeDir(const char *path, struct fuse_file_info *fi);
+    int openDir(const char *path, struct fuse_file_info *);
+    int readDir(const char *path, void *buf,fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *);
+    int closeDir(const char *path, struct fuse_file_info *);
 
-    int open(const char *path, struct fuse_file_info *fi);
-    int read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
-    int close(const char *path, struct fuse_file_info *fi);
+    int open(const char *path, struct fuse_file_info *);
+    int read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *);
+    int close(const char *path, struct fuse_file_info *);
 
 public slots:
 

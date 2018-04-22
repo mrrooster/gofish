@@ -101,7 +101,7 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
     return 0;
 }
 
-int FuseThread::openDir(const char *path, struct fuse_file_info *fi)
+int FuseThread::openDir(const char *path, struct fuse_file_info *)
 {
     D("In opendir"<<path);
     GoogleDriveObject *obj = getObjectForPath(path);
@@ -111,7 +111,7 @@ int FuseThread::openDir(const char *path, struct fuse_file_info *fi)
     return obj?0:-ENOENT;
 }
 
-int FuseThread::readDir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi)
+int FuseThread::readDir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *)
 {
     D("In readDir... "<<path);
     GoogleDriveObject *object = getObjectForPath(path);
@@ -131,21 +131,21 @@ int FuseThread::readDir(const char *path, void *buf, fuse_fill_dir_t filler, off
     return ret;
 }
 
-int FuseThread::closeDir(const char *path, struct fuse_file_info *fi)
+int FuseThread::closeDir(const char *path, struct fuse_file_info *)
 {
     D("In closedir:"<<path);
     GoogleDriveObject *item = getObjectForPath(path);
     return (item)?0:-ENOENT;
 }
 
-int FuseThread::open(const char *path, struct fuse_file_info *fi)
+int FuseThread::open(const char *path, struct fuse_file_info *)
 {
     D("In open"<<path);
     GoogleDriveObject *obj = getObjectForPath(path);
     return obj?0:-ENOENT;
 }
 
-int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
+int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *)
 {
     D("In read"<<path<<", offset:"<<offset<<", size:"<<size);
 
@@ -156,6 +156,14 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
     quint64 readCount = 0;
     char *ptr=buf;
     quint64 chunkStart = (start/blockSize) * blockSize;
+
+    if (start>=item->getSize()) {
+        return -ENODATA;
+    }
+
+    if ((start+size)>item->getSize()) {
+        size = item->getSize()-start;
+    }
 
     if (item && !item->isFolder()) {
         while (size>0) {
@@ -194,7 +202,7 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
     return readCount;
 }
 
-int FuseThread::close(const char *path, fuse_file_info *fi)
+int FuseThread::close(const char *path,struct fuse_file_info *)
 {
     return (getObjectForPath(path))?0:-ENOENT;
 }
