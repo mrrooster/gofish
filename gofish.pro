@@ -15,7 +15,7 @@ unix {
 }
 
 !CONFIG(debug, debug|release) {
-    DEFINES += QT_NO_DEBUG_OUTPUT #QT_NO_WARNING_OUTPUT
+#    DEFINES += QT_NO_DEBUG_OUTPUT #QT_NO_WARNING_OUTPUT
 }
 
 # The following define makes your compiler emit warnings if you use

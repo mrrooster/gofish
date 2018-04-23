@@ -32,7 +32,7 @@ FuseThread::FuseThread(int argc, char *argv[],GoogleDrive *gofish, QObject *pare
     connect(&this->refreshTimer,&QTimer::timeout,this,&FuseThread::setupRoot);
     this->refreshTimer.setSingleShot(false);
     this->refreshTimer.start(refreshSecs*1000);
-    qInfo() << QString("Refreshing directory every %1 seconds.").arg(refreshSecs);
+    qInfo().noquote() << QString("Refreshing directory every %1 seconds.").arg(refreshSecs);
 }
 
 void FuseThread::run()
@@ -55,7 +55,6 @@ void FuseThread::run()
 
 int FuseThread::getAttr(const char *path, struct stat *stbuf)
 {
-    QString pathString(path);
     D("In getattr"<<path);
 
     GoogleDriveObject *item = getObjectForPath(path);
@@ -64,39 +63,7 @@ int FuseThread::getAttr(const char *path, struct stat *stbuf)
         return -ENOENT;
     }
 
-    ::memset(stbuf,0,sizeof(struct stat));
-
- //   stbuf->st_mode = 0666;
-    stbuf->st_mode= 0555;
-    if (item->isFolder()) {
-        D("Thingy is dir.");
-        stbuf->st_mode |= S_IFDIR;
-        stbuf->st_size = 512;
-        stbuf->st_nlink = 2 + item->getChildFolderCount();
-    } else {
-        D("Thingy is regular file.");
-        stbuf->st_mode |= S_IFREG;
-        stbuf->st_size = item->getSize();
-        stbuf->st_nlink = 1;
-    }
-    stbuf->st_rdev = S_IFCHR;
-    stbuf->st_ctime= item->getCreatedTime().toTime_t();
-    stbuf->st_mtime= item->getCreatedTime().toTime_t();
-    stbuf->st_ino  = item->getInode();
-    /*
-    if (this->paths.contains(path)) {
-        QJsonDocument doc = this->paths.value(path);
-        stbuf->st_size = doc["size"].toDouble(0);
-        stbuf->st_ctime = 3431;
-        stbuf->st_atime = 3542325;
-        stbuf->st_mtime = stbuf->st_atime;
-        stbuf->st_ino   = doc["inode"].toDouble(0);
-    }
-    */
-    stbuf->st_uid = this->user;
-    stbuf->st_gid = this->group;
-    //stbuf->st
-
+    setupStat(item,stbuf);
     D("Leaving getattr:"<<path);
     return 0;
 }
@@ -105,9 +72,6 @@ int FuseThread::openDir(const char *path, struct fuse_file_info *)
 {
     D("In opendir"<<path);
     GoogleDriveObject *obj = getObjectForPath(path);
-    if (obj) {
-        obj->getChildFolderCount();
-    }
     return obj?0:-ENOENT;
 }
 
@@ -121,10 +85,12 @@ int FuseThread::readDir(const char *path, void *buf, fuse_fill_dir_t filler, off
     }
 
     int ret = 0;
+    struct stat stbuf;
     QVector<GoogleDriveObject*> children = object->getChildren();
     for(int idx=offset;idx<children.size();idx++) {
         GoogleDriveObject *child = children.at(idx);
-        if(ret==0 && filler(buf,child->getName().toUtf8().constData(),0,0)) {
+        setupStat(child,&stbuf);
+        if(ret==0 && filler(buf,child->getName().toUtf8().constData(),&stbuf,0)) {
             ret = -ENOMEM;
         }
     }
@@ -161,6 +127,10 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
         return -ENODATA;
     }
 
+    if (item->isFolder()) {
+        return -EISDIR;
+    }
+
     if ((start+size)>item->getSize()) {
         size = item->getSize()-start;
     }
@@ -171,10 +141,11 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
 
             // read a chunk
             QByteArray data = item->read(chunkStart,blockSize);
-            QByteArray where = QString("%1 _ %2 _ %3").arg(path).arg(chunkStart).arg(blockSize).toLocal8Bit();
-            Q_ASSERT_X(!data.isEmpty(),"read",where.data());
 
             D("Got returned data, size: "<<data.size());
+            if (data.isEmpty()) {
+                return -EIO;
+            }
 
             int copySize = size;
             if (data.size()<copySize) {
@@ -247,6 +218,30 @@ void FuseThread::validatePath(QString path)
     getObjectForPath(path);
 }
 
+void FuseThread::setupStat(GoogleDriveObject *item,struct stat *stbuf)
+{
+    ::memset(stbuf,0,sizeof(struct stat));
+
+    stbuf->st_mode= 0555;
+    if (item->isFolder()) {
+        D("Thingy is dir.");
+        stbuf->st_mode |= S_IFDIR;
+        stbuf->st_size = 0;
+        stbuf->st_nlink = 2 + item->getChildFolderCount();
+    } else {
+        D("Thingy is regular file.");
+        stbuf->st_mode |= S_IFREG;
+        stbuf->st_size = item->getSize();
+        stbuf->st_nlink = 1;
+    }
+    stbuf->st_rdev = S_IFCHR;
+    stbuf->st_ctime= item->getCreatedTime().toTime_t();
+    stbuf->st_mtime= item->getCreatedTime().toTime_t();
+    stbuf->st_ino  = item->getInode();
+    stbuf->st_uid = this->user;
+    stbuf->st_gid = this->group;
+}
+
 void FuseThread::setupRoot()
 {
     QMutexLocker locker(&this->rootSwapLock);
@@ -260,7 +255,7 @@ void FuseThread::setupRoot()
         if (cacheSize<(CACHE_CHUNK_SIZE/1024)) {
             cacheSize = (CACHE_CHUNK_SIZE/1024);
         }
-        qInfo() << QString("Using in memory cache of %1MiB").arg(cacheSize/1024);
+        qInfo().noquote() << QString("Using in memory cache of %1MiB").arg(cacheSize/1024);
         this->cache = new QCache<QString,QByteArray>(cacheSize);
     }
 

@@ -25,8 +25,6 @@ public:
     bool pathInPreflight(quint64 token);
     bool pathInFlight(QString path);
     QByteArray getPendingSegment(QString fileId, quint64 start, quint64 length);
-    unsigned int getRefreshSeconds();
-    quint64 getInMemoryCacheSizeBytes();
     quint64 getInodeForFileId(QString id);
 
 signals:

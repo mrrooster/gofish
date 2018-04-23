@@ -9,18 +9,29 @@
 
 #include <QDebug>
 
+void messageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg);
+
+qint64 g_startTime;
+bool g_debug = false;
+
 int main(int argc, char *argv[])
 {
     QCoreApplication::setOrganizationDomain("gofish.ohmyno.co.uk");
     QCoreApplication::setApplicationName("GoFiSh");
     QCoreApplication::setApplicationVersion(QString("%1 build date: %2 %3 %4")
-                                            .arg("20180409")
+                                            .arg("20180424")
                                             .arg(__DATE__)
                                             .arg(QSysInfo::prettyProductName())
                                             .arg(QSysInfo::buildCpuArchitecture())
                                             );
 
+    qInstallMessageHandler(messageOutput);
     QCoreApplication a(argc, argv);
+
+    g_startTime = QDateTime::currentMSecsSinceEpoch();
+#ifdef QT_DEBUG
+    g_debug = true;
+#endif
 
     QCommandLineParser parser;
     QCommandLineOption clientIdOpt("id","Set the google client ID, you must do this at least once.","Google client ID");
@@ -29,18 +40,20 @@ int main(int argc, char *argv[])
     QCommandLineOption cacheSizeOpt("cache-bytes","Set the size of the in memory block cache in bytes. More memory good.","Bytes");
     QCommandLineOption dloadOpt("download-size","How much data to download in each request, this should be roughly a quater of your total download speed.","Bytes");
     QCommandLineOption foregroundOpt("f","Run in the foreground");
-    QCommandLineOption optionsOpt("o","Fuse fs options","Options");
+    QCommandLineOption optionsOpt("o","mount options for fuse, eg: ro,allow_other","Options");
+    QCommandLineOption debugOpt("d","Turn on debugging output");
 
     parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive. The refresh-secs, cache-bytes, id, secret and download-bytes options are saved to the settings file, and therefore only need to be specified once.");
     parser.addHelpOption();
     parser.addVersionOption();
+    parser.addOption(optionsOpt);
+    parser.addOption(foregroundOpt);
+    parser.addOption(debugOpt);
     parser.addOption(clientIdOpt);
     parser.addOption(clientSecretOpt);
-    parser.addOption(foregroundOpt);
     parser.addOption(cacheSizeOpt);
     parser.addOption(dloadOpt);
     parser.addOption(refreshSecondsOpt);
-    parser.addOption(optionsOpt);
     parser.addPositionalArgument("mountpoint","The mountpoint to use");
     parser.process(a);
 
@@ -64,6 +77,9 @@ int main(int argc, char *argv[])
         QSettings settings;
         settings.beginGroup("googledrive");
         settings.setValue("download_chunk_bytes",parser.value(dloadOpt));
+    }
+    if (parser.isSet(debugOpt)) {
+        g_debug = true;
     }
 
     QSettings settings;
@@ -109,4 +125,30 @@ and 'secret' options.";
     });
 
     return a.exec();
+}
+
+void messageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+    QByteArray localMsg = msg.toLocal8Bit();
+
+    switch (type) {
+    case QtDebugMsg:
+        if (g_debug) {
+            ::fprintf(stdout, "%s\n",localMsg.constData());
+        }
+        break;
+    case QtInfoMsg:
+        ::fprintf(stdout, "%s\n",localMsg.constData());
+        break;
+    case QtWarningMsg:
+        ::fprintf(stderr, "Warning: %s\n", localMsg.constData());
+        break;
+    case QtCriticalMsg:
+        ::fprintf(stderr, "Critical: %s\n", localMsg.constData());
+        break;
+    case QtFatalMsg:
+        ::fprintf(stderr, "Fatal: %s (%s:%u, %s)\n", localMsg.constData(), context.file, context.line, context.function);
+        abort();
+    }
+    fflush(stderr);
+    fflush(stdout);
 }

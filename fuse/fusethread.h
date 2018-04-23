@@ -48,6 +48,7 @@ private:
 
     GoogleDriveObject *getObjectForPath(QString path);
     void validatePath(QString path);
+    void setupStat(GoogleDriveObject *item, struct stat *stbuf);
 
     static int fuse_getattr(const char *path, struct stat *stbuf);
 

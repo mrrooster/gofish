@@ -103,20 +103,6 @@ QByteArray GoogleDrive::getPendingSegment(QString fileId, quint64 start, quint64
     return QByteArray();
 }
 
-unsigned int GoogleDrive::getRefreshSeconds()
-{
-    QSettings settings;
-    settings.beginGroup("googledrive");
-    return settings.value("refresh_seconds",3600).toUInt();
-}
-
-quint64 GoogleDrive::getInMemoryCacheSizeBytes()
-{
-    QSettings settings;
-    settings.beginGroup("googledrive");
-    return settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong();
-}
-
 void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length, quint64 token)
 {
     QString id = QString("%1:%2:%3").arg(fileId).arg(start).arg(length);
@@ -305,7 +291,7 @@ QString GoogleDrive::getRefreshToken()
 
 QString GoogleDrive::sanitizeFilename(QString path)
 {
-    return path.replace(QRegExp("[:]"),"_");
+    return path.replace(QRegExp("[/]"),"_");
 }
 
 void GoogleDrive::authenticate()
@@ -367,7 +353,7 @@ void GoogleDrive::authenticate()
     });
 
     connect(this->auth, &QOAuth2AuthorizationCodeFlow::authorizeWithBrowser, [](const QUrl url) {
-        qInfo() << QString("To use this app you must allow it access to your Google drive. To do this plese visit the following URL:\n\n\t%1\n\nIdeally you should visit this URL on a browser on the machine you are running gofish from. This will allow the callback to work correctly. If you are accessing the machine remotely then see the documentation for the additonal steps required.").arg(url.toString());
+        qInfo().noquote() << QString("To use this app you must allow it access to your Google drive. To do this plese visit the following URL:\n\n\t%1\n\nIdeally you should visit this URL on a browser on the machine you are running gofish from. This will allow the callback to work correctly. If you are accessing the machine remotely then see the documentation for the additonal steps required.").arg(url.toString());
     });
 
     this->refreshTokenTimer.setSingleShot(true);
