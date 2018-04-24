@@ -50,19 +50,16 @@ There are a few options you can tune to improve performance:
 |_refresh-secs_|This controls how long directory information is cached for. If your drive contents don't change that often you can set this to a high value to reduce the number of reads from Google. The default is 600 seconds.|
 |_cache-bytes_|This controls how many bytes the in memory block cache uses. The default is 128MB.|
 |_download-size_|This sets the amount of data that is downloaded in one request. You can probably leave this at it's default of 2MiB, however if you have a much faster or slower connection you may wish to change this. A good rule of thumb is about a quarter of whatever your internet speed is. So if you can download at 1MiB/sec you should probably set this to 256K. The value is in bytes. For example 256K this would be 262144.|
-
-There's a few others too (-h is your friend. :) ):
-
-|Option|Description|
 |--|--|
-|_-f_|Don't go to the background. This is recommended at the moment as there's quite a lot of debug output.|
+|_-f_|Don't go to the background.|
+|_-d_|Enable debug output. Should be used with -f|
 |_-o <options>_|This allows you to pass mount options to FUSE.
 
 ## Building
 
 Gofish is written using Qt, and requires at least version 5.8. Qt requires SSL support too.
 
-Currently it's developed on NetBSD against refuse, however it should build and run on Linux too.
+Currently it's developed on NetBSD against refuse, although it's also tested occasionally on Debian and Ubuntu.
 
 To build, get a copy of the source code:
 
@@ -70,7 +67,7 @@ To build, get a copy of the source code:
 $ git clone ..../gofish.git
 ```
 
-Then creat a build folder:
+Then create a build folder:
 
 ```
 $ mkdir gofish-build
