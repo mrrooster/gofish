@@ -260,10 +260,16 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
             op->handler(responseData);
             delete op;
         } else {
+            if (response->error()==QNetworkReply::AuthenticationRequiredError) {
+                D("Authentication error, reauthing...");
+                this->refreshTokenTimer.stop();
+                authenticate();
+            }
             D("Error: "<<response->errorString());
             op->retryCount++;
             if (op->retryCount>10) {
                 D("Abandoning request due to >10 retries.");
+                op->handler(QByteArray()); // Call the response with no data to prevent locks
                 delete op;
             } else {
                 this->queuedOps.append(op);

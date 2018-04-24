@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include <QCoreApplication>
 #include <QString>
 #include <QThread>
@@ -16,6 +18,10 @@ bool g_debug = false;
 
 int main(int argc, char *argv[])
 {
+    g_startTime = QDateTime::currentMSecsSinceEpoch();
+#ifdef QT_DEBUG
+    g_debug = true;
+#endif
     QCoreApplication::setOrganizationDomain("gofish.ohmyno.co.uk");
     QCoreApplication::setApplicationName("GoFiSh");
     QCoreApplication::setApplicationVersion(QString("%1 build date: %2 %3 %4")
@@ -26,12 +32,6 @@ int main(int argc, char *argv[])
                                             );
 
     qInstallMessageHandler(messageOutput);
-    QCoreApplication a(argc, argv);
-
-    g_startTime = QDateTime::currentMSecsSinceEpoch();
-#ifdef QT_DEBUG
-    g_debug = true;
-#endif
 
     QCommandLineParser parser;
     QCommandLineOption clientIdOpt("id","Set the google client ID, you must do this at least once.","Google client ID");
@@ -55,7 +55,12 @@ int main(int argc, char *argv[])
     parser.addOption(dloadOpt);
     parser.addOption(refreshSecondsOpt);
     parser.addPositionalArgument("mountpoint","The mountpoint to use");
-    parser.process(a);
+
+    QStringList args;
+    for(int x=0;x<argc;x++) {
+        args.append(argv[x]);
+    }
+    parser.process(args);
 
     if (!parser.value(clientIdOpt).isEmpty()) {
         QSettings settings;
@@ -98,9 +103,10 @@ and 'secret' options.";
     if (fuseArgs.size()!=1) {
         parser.showHelp(1);
     }
-    if (parser.isSet(foregroundOpt)) {
-        fuseArgsData.append("-f");
+    if (!parser.isSet(foregroundOpt)) {
+        ::daemon(0,0);
     }
+    fuseArgsData.append("-f");
     if (parser.isSet(optionsOpt)) {
         fuseArgsData.append("-o");
         fuseArgsData.append(parser.value(optionsOpt).toLocal8Bit());
@@ -113,11 +119,14 @@ and 'secret' options.";
         fuse_argv[x]=const_cast<char*>(fuseArgsData.at(x).data());
     }
 
+    QCoreApplication a(argc, argv);
+
     GoogleDrive googledrive;
+    FuseThread *thread = nullptr;
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
-        if (state==GoogleDrive::Connected) {
-            qDebug() << "Drive connected, starting fuse thread...";
-            FuseThread *thread = new FuseThread(fuse_argc,fuse_argv,&googledrive);
+        if (state==GoogleDrive::Connected && thread==nullptr) {
+            qInfo() << "Starting fuse thread...";
+            thread = new FuseThread(fuse_argc,fuse_argv,&googledrive);
             QObject::connect(thread,&FuseThread::finished,thread,&FuseThread::deleteLater);
             QObject::connect(thread,&FuseThread::finished,&googledrive,&FuseThread::deleteLater);
             thread->start();
