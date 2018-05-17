@@ -129,6 +129,7 @@ and 'secret' options.";
             thread = new FuseThread(fuse_argc,fuse_argv,&googledrive);
             QObject::connect(thread,&FuseThread::finished,thread,&FuseThread::deleteLater);
             QObject::connect(thread,&FuseThread::finished,&googledrive,&FuseThread::deleteLater);
+            QObject::connect(thread,&FuseThread::finished,&a,&QCoreApplication::quit);
             thread->start();
         }
     });

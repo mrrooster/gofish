@@ -47,6 +47,7 @@ void FuseThread::run()
     fuse_ops->open = FuseThread::fuse_open;
     fuse_ops->read = FuseThread::fuse_read;
     fuse_ops->release = FuseThread::fuse_close;
+    fuse_ops->destroy = FuseThread::fuse_destroy;
 
     setupRoot();
 
@@ -178,6 +179,11 @@ int FuseThread::close(const char *path,struct fuse_file_info *)
     return (getObjectForPath(path))?0:-ENOENT;
 }
 
+void FuseThread::destroy()
+{
+    //terminate();
+}
+
 GoogleDriveObject *FuseThread::getObjectForPath(QString path)
 {
     QMutexLocker locker(&this->rootSwapLock);
@@ -301,6 +307,11 @@ int FuseThread::fuse_close(const char *path, struct fuse_file_info *fi)
 int FuseThread::fuse_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     return static_cast<FuseThread*>(fuse_get_context()->private_data)->read(path,buf,size,offset,fi);
+}
+
+void FuseThread::fuse_destroy(void *)
+{
+    static_cast<FuseThread*>(fuse_get_context()->private_data)->destroy();
 }
 
 

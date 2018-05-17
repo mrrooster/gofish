@@ -32,6 +32,8 @@ public:
     int read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *);
     int close(const char *path, struct fuse_file_info *);
 
+    void destroy();
+
 public slots:
 
 private:
@@ -59,6 +61,8 @@ private:
     static int fuse_open(const char *path, struct fuse_file_info *fi);
     static int fuse_close(const char *path, struct fuse_file_info *fi);
     static int fuse_read(const char *path, char *buf, size_t size, off_t offset,struct fuse_file_info *fi);
+
+    static void fuse_destroy(void *);
 private slots:
     void setupRoot();
 };

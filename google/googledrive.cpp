@@ -24,7 +24,6 @@ const QUrl files_info("https://www.googleapis.com/drive/v3/files/");
 
 GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(Disconnected)
 {
-
     //Operation timer
     connect(&this->operationTimer,&QTimer::timeout,this,&GoogleDrive::operationTimerFired);
 
@@ -265,7 +264,7 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
                 this->refreshTokenTimer.stop();
                 authenticate();
             }
-            D("Error: "<<response->errorString());
+            D("Error: "<<response->errorString()<<response->error());
             op->retryCount++;
             if (op->retryCount>10) {
                 D("Abandoning request due to >10 retries.");
