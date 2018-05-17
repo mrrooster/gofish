@@ -107,6 +107,10 @@ and 'secret' options.";
         ::daemon(0,0);
     }
     fuseArgsData.append("-f");
+
+    // For now keep our threads single....
+    fuseArgsData.append("-s");
+
     if (parser.isSet(optionsOpt)) {
         fuseArgsData.append("-o");
         fuseArgsData.append(parser.value(optionsOpt).toLocal8Bit());
