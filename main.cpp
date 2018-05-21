@@ -42,9 +42,11 @@ int main(int argc, char *argv[])
     QCommandLineOption foregroundOpt("f","Run in the foreground");
     QCommandLineOption optionsOpt("o","mount options for fuse, eg: ro,allow_other","Options");
     QCommandLineOption debugOpt("d","Turn on debugging output");
+    QCommandLineOption helpOpt(QStringList({"h","help"}),"Help. Show this help.");
 
     parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive. The refresh-secs, cache-bytes, id, secret and download-bytes options are saved to the settings file, and therefore only need to be specified once.");
-    parser.addHelpOption();
+    //parser.addHelpOption();
+    parser.addOption(helpOpt);
     parser.addVersionOption();
     parser.addOption(optionsOpt);
     parser.addOption(foregroundOpt);
@@ -100,22 +102,24 @@ and 'secret' options.";
     QStringList fuseArgs = parser.positionalArguments();
     QVector<QByteArray> fuseArgsData;
     fuseArgsData.append(argv[0]);
-    if (fuseArgs.size()!=1) {
-        parser.showHelp(1);
-    }
-    if (!parser.isSet(foregroundOpt)) {
-        ::daemon(0,0);
-    }
-    fuseArgsData.append("-f");
+    bool showHelp = false;
+    if (fuseArgs.size()!=1 || parser.isSet(helpOpt)) {
+        showHelp = true;
+    } else {
+        if (!parser.isSet(foregroundOpt)) {
+            ::daemon(0,0);
+        }
+        fuseArgsData.append("-f");
 
-    // For now keep our threads single....
-    fuseArgsData.append("-s");
+        // For now keep our threads single....
+        fuseArgsData.append("-s");
 
-    if (parser.isSet(optionsOpt)) {
-        fuseArgsData.append("-o");
-        fuseArgsData.append(parser.value(optionsOpt).toLocal8Bit());
+        if (parser.isSet(optionsOpt)) {
+            fuseArgsData.append("-o");
+            fuseArgsData.append(parser.value(optionsOpt).toLocal8Bit());
+        }
+        fuseArgsData.append(fuseArgs.first().toLocal8Bit());
     }
-    fuseArgsData.append(fuseArgs.first().toLocal8Bit());
 
     char **fuse_argv = new char*[fuseArgsData.size()];
     int fuse_argc = fuseArgsData.size();
@@ -124,6 +128,11 @@ and 'secret' options.";
     }
 
     QCoreApplication a(argc, argv);
+
+    if (showHelp) {
+        parser.showHelp(1);
+        return 1;
+    }
 
     GoogleDrive googledrive;
     FuseThread *thread = nullptr;

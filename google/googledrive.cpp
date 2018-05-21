@@ -138,6 +138,11 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     url.setQuery(query);
     queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QByteArray responseData){
         //D("Read file response data:"<<responseData);
+        if (responseData.isEmpty()) {
+            D("Error'd/empty response. Releasing lock");
+            getBlockingLock(startPath)->unlock();
+            return;
+        }
         QJsonDocument doc = QJsonDocument::fromJson(responseData);
         //D("Got response:"<<doc);
 
@@ -236,14 +241,16 @@ void GoogleDrive::operationTimerFired()
     if (this->queuedOps.isEmpty()) {
         this->operationTimer.stop();
     } else {
-        QMutexLocker lock(&this->oAuthLock);
-        GoogleDriveOperation *op = this->queuedOps.takeFirst();
-        if (!op->headers.isEmpty()) {
-            dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op->headers);
+        if (this->state == Connected) {
+            QMutexLocker lock(&this->oAuthLock);
+            GoogleDriveOperation *op = this->queuedOps.takeFirst();
+            if (!op->headers.isEmpty()) {
+                dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op->headers);
+            }
+            auto response = this->auth->get(op->url);
+            D("Got response: "<<response);
+            this->inprogressOps.insert(response,op);
         }
-        auto response = this->auth->get(op->url);
-        D("Got response: "<<response);
-        this->inprogressOps.insert(response,op);
         this->operationTimer.start();
     }
 }
@@ -261,6 +268,7 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
         } else {
             if (response->error()==QNetworkReply::AuthenticationRequiredError) {
                 D("Authentication error, reauthing...");
+                setState(Disconnected);
                 this->refreshTokenTimer.stop();
                 authenticate();
             }
@@ -346,7 +354,7 @@ void GoogleDrive::authenticate()
         if (status==QAbstractOAuth::Status::Granted) {
            D( "Authorised. Starting token refresh timer.");
 
-           quint64 msecs = 600000;
+           quint64 msecs = 120000;
 
            D("Setting token refresh timer for"<<msecs<<"ms.");
 
