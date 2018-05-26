@@ -39,9 +39,10 @@ int main(int argc, char *argv[])
     QCommandLineOption refreshSecondsOpt("refresh-secs","Set the number of seconds between refreshes, the longer this value is the better performance will be, however remote changes may not become visible.","Seconds");
     QCommandLineOption cacheSizeOpt("cache-bytes","Set the size of the in memory block cache in bytes. More memory good.","Bytes");
     QCommandLineOption dloadOpt("download-size","How much data to download in each request, this should be roughly a quater of your total download speed.","Bytes");
-    QCommandLineOption foregroundOpt("f","Run in the foreground");
-    QCommandLineOption optionsOpt("o","mount options for fuse, eg: ro,allow_other","Options");
-    QCommandLineOption debugOpt("d","Turn on debugging output");
+    QCommandLineOption singleThreadedOpt(QStringList("f","foreground"),"Run in the foreground");
+    QCommandLineOption foregroundOpt(QStringList("s","single"),"Single threaded fuse.");
+    QCommandLineOption optionsOpt(QStringList("o","options"),"mount options for fuse, eg: ro,allow_other","Options");
+    QCommandLineOption debugOpt(QStringList("d","debug"),"Turn on debugging output, implies -f");
     QCommandLineOption helpOpt(QStringList({"h","help"}),"Help. Show this help.");
 
     parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive. The refresh-secs, cache-bytes, id, secret and download-bytes options are saved to the settings file, and therefore only need to be specified once.");
@@ -49,6 +50,7 @@ int main(int argc, char *argv[])
     parser.addOption(helpOpt);
     parser.addVersionOption();
     parser.addOption(optionsOpt);
+    parser.addOption(singleThreadedOpt);
     parser.addOption(foregroundOpt);
     parser.addOption(debugOpt);
     parser.addOption(clientIdOpt);
@@ -106,19 +108,22 @@ and 'secret' options.";
     if (fuseArgs.size()!=1 || parser.isSet(helpOpt)) {
         showHelp = true;
     } else {
-        if (!parser.isSet(foregroundOpt)) {
-            ::daemon(0,0);
-        }
         fuseArgsData.append("-f");
 
-        // For now keep our threads single....
-        fuseArgsData.append("-s");
+        if (parser.isSet(singleThreadedOpt)) {
+            qInfo() << "Single threaded FUSE.";
+            fuseArgsData.append("-s");
+        }
 
         if (parser.isSet(optionsOpt)) {
             fuseArgsData.append("-o");
             fuseArgsData.append(parser.value(optionsOpt).toLocal8Bit());
         }
         fuseArgsData.append(fuseArgs.first().toLocal8Bit());
+
+        if (!parser.isSet(foregroundOpt) && !g_debug ) {
+            ::daemon(0,0);
+        }
     }
 
     char **fuse_argv = new char*[fuseArgsData.size()];
@@ -138,7 +143,6 @@ and 'secret' options.";
     FuseThread *thread = nullptr;
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected && thread==nullptr) {
-            qInfo() << "Starting fuse thread...";
             thread = new FuseThread(fuse_argc,fuse_argv,&googledrive);
             QObject::connect(thread,&FuseThread::finished,thread,&FuseThread::deleteLater);
             QObject::connect(thread,&FuseThread::finished,&googledrive,&FuseThread::deleteLater);
