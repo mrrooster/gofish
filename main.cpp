@@ -39,8 +39,8 @@ int main(int argc, char *argv[])
     QCommandLineOption refreshSecondsOpt("refresh-secs","Set the number of seconds between refreshes, the longer this value is the better performance will be, however remote changes may not become visible.","Seconds");
     QCommandLineOption cacheSizeOpt("cache-bytes","Set the size of the in memory block cache in bytes. More memory good.","Bytes");
     QCommandLineOption dloadOpt("download-size","How much data to download in each request, this should be roughly a quater of your total download speed.","Bytes");
-    QCommandLineOption singleThreadedOpt(QStringList({"f","foreground"}),"Run in the foreground");
-    QCommandLineOption foregroundOpt(QStringList({"s","single"}),"Single threaded fuse.");
+    QCommandLineOption foregroundOpt(QStringList({"f","foreground"}),"Run in the foreground");
+    QCommandLineOption singleThreadedOpt(QStringList({"s","single"}),"Single threaded fuse.");
     QCommandLineOption optionsOpt(QStringList({"o","options"}),"mount options for fuse, eg: ro,allow_other","Options");
     QCommandLineOption debugOpt(QStringList({"d","debug"}),"Turn on debugging output, implies -f");
     QCommandLineOption helpOpt(QStringList({"h","help"}),"Help. Show this help.");
