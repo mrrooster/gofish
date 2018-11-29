@@ -9,7 +9,7 @@ unix {
     message(Building for NetBSD)
     LIBS += -lrefuse
   } else {
-    LIBS += -lfuse
+    LIBS += -lfuse3
     QMAKE_CXXFLAGS += -D_FILE_OFFSET_BITS=64
   }
 }
@@ -32,7 +32,6 @@ DEFINES += QT_DEPRECATED_WARNINGS
 SOURCES += main.cpp \
     google/oauth2handler.cpp \
     google/googledrive.cpp \
-    fuse/fusethread.cpp \
     google/googledriveobject.cpp \
     google/googlenetworkaccessmanager.cpp \
     google/goauth2authorizationcodeflow.cpp \
@@ -42,7 +41,6 @@ SOURCES += main.cpp \
 HEADERS += \
     google/oauth2handler.h \
     google/googledrive.h \
-    fuse/fusethread.h \
     google/googledriveobject.h \
     google/googlenetworkaccessmanager.h \
     defaults.h \

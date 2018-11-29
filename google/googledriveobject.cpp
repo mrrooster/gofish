@@ -1,5 +1,4 @@
 #include <QDebug>
-#include <QThread>
 #include <QSettings>
 
 #include "googledriveobject.h"
@@ -9,14 +8,12 @@
 
 #define DEBUG_GOOGLE_OBJECT
 #ifdef DEBUG_GOOGLE_OBJECT
-#define D(x) qDebug() << QString("[GoogleDriveObject::%1]").arg(QString::number((quint64)QThread::currentThreadId(),16)).toUtf8().data() << x
+#define D(x) qDebug() << QString("[GoogleDriveObject::]").toUtf8().data() << x
 #define SD(x) qDebug() << QString("[GoogleDriveObject::static]") << x
 #else
 #define D(x)
 #define SD(x)
 #endif
-
-QMutex GoogleDriveObject::cacheLock;
 
 GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QCache<QString, QByteArray> *cache, QObject *parent) :
     GoogleDriveObject::GoogleDriveObject(gofish,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),cache,parent)
@@ -90,9 +87,9 @@ quint64 GoogleDriveObject::getSize() const
 
 quint64 GoogleDriveObject::getChildFolderCount()
 {
-    if (this->isFolder() && !this->populated) {
-        getChildren();
-    }
+    //if (this->isFolder() && !this->populated) {
+    //    getChildren();
+    //}
     return this->childFolderCount;
 }
 
@@ -113,6 +110,11 @@ quint64 GoogleDriveObject::getInode() const
     return this->inode;
 }
 
+void GoogleDriveObject::setInode(quint64 inode)
+{
+    this->inode = inode;
+}
+
 QDateTime GoogleDriveObject::getCreatedTime()
 {
     return this->ctime;
@@ -128,29 +130,34 @@ QDateTime GoogleDriveObject::getModifiedTime()
  * @return A list of children.
  *
  */
-QVector<GoogleDriveObject *> GoogleDriveObject::getChildren()
+quint64 GoogleDriveObject::getChildren()
 {
-    QMutexLocker locker(&this->childrenRefreshLock);
+    quint64 token = this->requestToken++;
     qint64 currentSecs = QDateTime::currentSecsSinceEpoch();
     QString fullPath = getPath();
     D("In get children of: "<<fullPath);
-    if (this->isFolder() && !this->populated) {
-        quint64 requestToken = this->gofish->addPathToPreFlightList(fullPath);
-        D("Get child request token:"<<requestToken);
-        emit readFolder(fullPath,this->id.isEmpty()?"root":this->id,this,requestToken);
-        QThread::yieldCurrentThread();
-        while(this->gofish->pathInPreflight(requestToken)) {
-            QThread::yieldCurrentThread();
+    if (this->isFolder()) {
+        if (this->populated) {
+            D("Returning populated list..");
+            QTimer::singleShot(0,[this,token]() {
+               emit this->children(this->contents,token);
+            });
+        } else {
+            quint64 requestToken = this->gofish->addPathToPreFlightList(fullPath);
+
+            connect(this->gofish,&GoogleDrive::remoteFolder,[=](QString path,QVector<GoogleDriveObject*> children){
+                D("Got children of: "<<fullPath);
+                for(GoogleDriveObject *child:children) {
+                    child->setCache(this->getCache());
+                }
+                this->setChildren(children);
+                emit this->children(children,token);
+            });
+
+            this->gofish->readRemoteFolder(fullPath,"",requestToken);
         }
-        D("Getting lock...");
-        QMutex *mtx = this->gofish->getBlockingLock(fullPath);
-        mtx->lock();
-        D("Got lock."<<fullPath<<mtx);
-        D("Got "<<this->contents.size()<<"children.");
-        this->updated = currentSecs;
-        mtx->unlock();
     }
-    return this->contents;
+    return token;
 }
 
 void GoogleDriveObject::setChildren(QVector<GoogleDriveObject *> newChildren)
@@ -167,75 +174,24 @@ void GoogleDriveObject::setChildren(QVector<GoogleDriveObject *> newChildren)
     this->populated = true;
 }
 
-QByteArray GoogleDriveObject::read(quint64 start, quint64 totalLength)
+quint64 GoogleDriveObject::read(quint64 start, quint64 totalLength)
 {
-    QByteArray retData;
+    quint64 token = this->requestToken++;
+    ReadData readData;
     //QString fullPath = getPath();
 
 
-    quint64 length = totalLength<this->cacheChunkSize ? totalLength:this->cacheChunkSize;
-    quint64 readStart = start;
+    readData.length = totalLength<this->cacheChunkSize ? totalLength:this->cacheChunkSize;
+    readData.start = start;
 
-    D("Read:"<<start<<totalLength<<getPath());
-
-    while(totalLength>0) {
-        quint64 msecs = this->mtime.toMSecsSinceEpoch();
-        QString chunkId = QString("%1:%2:%3:%4").arg(this->id).arg(start).arg(this->cacheChunkSize).arg(msecs);
-
-        D("READ chunk id:"<<chunkId);
-        bool done=false;
-        {
-            QMutexLocker cacheLocker(&GoogleDriveObject::cacheLock);
-            if (this->cache->contains(chunkId)) {
-                D("Got cache hit for:"<<chunkId);
-                retData.append(*this->cache->object(chunkId));
-                done=true;
-            }
-        }
-
-        if (!done && !this->isFolder()) {
-            QString readChunkId = QString("%1:%2:%3").arg(this->id).arg(readStart).arg(this->readChunkSize);
-            quint64 requestToken = this->gofish->addPathToPreFlightList(readChunkId);
-            emit readData(this->id,readStart,this->readChunkSize,requestToken);
-            QThread::yieldCurrentThread();
-            while(this->gofish->pathInPreflight(requestToken)) {
-                QThread::yieldCurrentThread();
-            }
-            D("Getting lock for file..."<<readChunkId);
-            QMutexLocker lock(this->gofish->getBlockingLock(readChunkId));
-            D("Got lock for file..."<<readChunkId);
-
-            QByteArray data = this->gofish->getPendingSegment(this->id,readStart,this->readChunkSize);
-            D("Got data: ,"<<data.size());
-
-            if (!data.isEmpty()) {
-                while(!data.isEmpty()) {
-                    QByteArray *cacheEntry = new QByteArray(data.left(this->cacheChunkSize));
-                    QString cacheChunkId = QString("%1:%2:%3:%4").arg(this->id).arg(readStart).arg(this->cacheChunkSize).arg(msecs);
-                    readStart+=this->cacheChunkSize;
-                    data = data.mid(this->cacheChunkSize);
-                    int cost = cacheEntry->size()/1024;
-                    if (cost==0) {
-                        cost=1;
-                    }
-                    if (chunkId == cacheChunkId) {
-                        retData.append(*cacheEntry);
-                    }
-                    QMutexLocker cacheLocker(&GoogleDriveObject::cacheLock);
-                    this->cache->insert(cacheChunkId,cacheEntry,cost);
-                    D("Inserted "<<cacheChunkId<<",of size: "<<cacheEntry->size()<<"into cache.");
-                    D("Cache: "<<this->cache->totalCost()<<"of"<<this->cache->maxCost()<<", "<<(((quint64)this->cache->totalCost())*100/((quint64)this->cache->maxCost()))<<"%");
-                }
-            }
-        }
-
-        start+=length;
-        totalLength -= length;
-        length = totalLength<this->cacheChunkSize ? totalLength:this->cacheChunkSize;
+    this->readMap.insert(token,readData);
+    if (!this->readTimer.isActive()) {
+        this->readTimer.setInterval(0);
+        this->readTimer.setSingleShot(true);
+        this->readTimer.start();
     }
+    return token;
 
-    D("Returning data size:"<<retData.size()<<getPath());
-    return retData;
 }
 
 QCache<QString, QByteArray> *GoogleDriveObject::getCache() const
@@ -243,10 +199,16 @@ QCache<QString, QByteArray> *GoogleDriveObject::getCache() const
     return this->cache;
 }
 
+void GoogleDriveObject::setCache(QCache<QString, QByteArray> *cache)
+{
+    this->cache = cache;
+}
+
 void GoogleDriveObject::setupConnections()
 {
-    connect(this,&GoogleDriveObject::readFolder,this->gofish,&GoogleDrive::readRemoteFolder);
-    connect(this,&GoogleDriveObject::readData,this->gofish,&GoogleDrive::getFileContents);
+    D("REMOVE ME! SETUPCONNECTIONS");
+//    connect(this,&GoogleDriveObject::readFolder,this->gofish,&GoogleDrive::readRemoteFolder);
+//    connect(this,&GoogleDriveObject::readData,this->gofish,&GoogleDrive::getFileContents);
 }
 
 void GoogleDriveObject::clearChildren()
@@ -257,6 +219,75 @@ void GoogleDriveObject::clearChildren()
     for(auto it = oldContents.begin(),end = oldContents.end();it!=end;it++) {
         (*it)->deleteLater();
     }
+}
+
+void GoogleDriveObject::setupReadTimer()
+{
+    connect(&this->readTimer,&QTimer::timeout,[=](){
+        if (!this->readMap.isEmpty()) {
+            quint64 key = this->readMap.firstKey();
+            ReadData data = this->readMap.take(key);
+            //D("Read:"<<starttotalLength<<getPath());
+
+            if(data.length>0) {
+                quint64 msecs = this->mtime.toMSecsSinceEpoch();
+                QString chunkId = QString("%1:%2:%3:%4").arg(this->id).arg(data.start).arg(this->cacheChunkSize).arg(msecs);
+
+                D("READ chunk id:"<<chunkId);
+                bool done=false;
+                {
+                    if (this->cache->contains(chunkId)) {
+                        D("Got cache hit for:"<<chunkId);
+                        data.data.append(*this->cache->object(chunkId));
+                        done=true;
+                    }
+                }
+
+                if (!done && !this->isFolder()) {
+                    QString readChunkId = QString("%1:%2:%3").arg(this->id).arg(data.start).arg(this->readChunkSize);
+                    quint64 requestToken = this->gofish->addPathToPreFlightList(readChunkId);
+                    connect(this->gofish,&GoogleDrive::pendingSegment,[=](QString fileId, quint64 start, quint64 length){
+                        if (fileId==this->id && start==data.start && length==this->readChunkSize) {
+                            QByteArray receivedData = this->gofish->getPendingSegment(this->id,data.start,this->readChunkSize);
+                            ReadData myData = data;
+                            D("Got data: ,"<<receivedData.size());
+
+                            if (!receivedData.isEmpty()) {
+                                while(!receivedData.isEmpty()) {
+                                    QByteArray *cacheEntry = new QByteArray(receivedData.left(this->cacheChunkSize));
+                                    QString cacheChunkId = QString("%1:%2:%3:%4").arg(this->id).arg(data.start).arg(this->cacheChunkSize).arg(msecs);
+                                    myData.start+=this->cacheChunkSize;
+                                    receivedData = receivedData.mid(this->cacheChunkSize);
+                                    int cost = cacheEntry->size()/1024;
+                                    if (cost==0) {
+                                        cost=1;
+                                    }
+                                    if (chunkId == cacheChunkId) {
+                                        myData.data.append(*cacheEntry);
+                                    }
+                                    this->cache->insert(cacheChunkId,cacheEntry,cost);
+                                    D("Inserted "<<cacheChunkId<<",of size: "<<cacheEntry->size()<<"into cache.");
+                                    D("Cache: "<<this->cache->totalCost()<<"of"<<this->cache->maxCost()<<", "<<(((quint64)this->cache->totalCost())*100/((quint64)this->cache->maxCost()))<<"%");
+                                }
+                            }
+                            myData.start+=length;
+                            myData.length -= length;
+                            if (data.length>0) {
+                                this->readMap.insert(key,myData);
+                                if (!this->readTimer.isActive()) {
+                                    this->readTimer.setSingleShot(true);
+                                    this->readTimer.setInterval(0);
+                                    this->readTimer.start();
+                                }
+                            } else {
+                                emit read(myData.data,key);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
 }
 
 QDebug operator<<(QDebug debug, const GoogleDriveObject &o)

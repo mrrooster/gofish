@@ -11,6 +11,10 @@ class GoogleDriveObject : public QObject
 {
     Q_OBJECT
 public:
+    struct ReadData {
+        QByteArray data;
+        quint64 start,length;
+    };
     explicit GoogleDriveObject(GoogleDrive *gofish, QCache<QString,QByteArray> *cache, QObject *parent = nullptr);
     explicit GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent=nullptr);
     ~GoogleDriveObject();
@@ -23,21 +27,27 @@ public:
     quint64 getChildFolderCount();
     quint64 getBlockSize();
     quint64 getInode() const;
+    void setInode(quint64 inode);
     QDateTime getCreatedTime();
     QDateTime getModifiedTime();
-    QVector<GoogleDriveObject*> getChildren();
+    quint64 getChildren();
     void setChildren(QVector<GoogleDriveObject*> newChildren);
-    QByteArray read(quint64 start, quint64 totalLength);
+    quint64 read(quint64 start, quint64 totalLength);
     QCache<QString,QByteArray> *getCache() const;
     quint32 getRefreshSecs();
+    void setCache(QCache<QString,QByteArray> *cache);
 
 //    void operator =(const GoogleDriveObject &other);
 signals:
     void readFolder(QString folder, QString parentId, GoogleDriveObject *into, quint64 requestToken);
     void readData(QString fileId, quint64 start, quint64 offset, quint64 requestToken);
 
+    void children(QVector<GoogleDriveObject*> children,quint64 requestToken);
+    void read(QByteArray data,quint64 requestToken);
+
 private:
     int usageCount;
+    quint64 requestToken;
     quint64 cacheChunkSize;
     quint64 readChunkSize;
     quint64 childFolderCount;
@@ -52,15 +62,16 @@ private:
     QDateTime mtime;
     qint64 updated;
     quint64 inode;
-    QMutex childrenRefreshLock;
 
     GoogleDrive *gofish;
     QCache<QString,QByteArray> *cache;
-    static QMutex cacheLock;
     QVector<GoogleDriveObject*> contents;
+    QMap<quint64,ReadData> readMap;
+    QTimer readTimer;
 
     void setupConnections();
     void clearChildren();
+    void setupReadTimer();
 };
 
 QDebug operator<<(QDebug debug, const GoogleDriveObject &o);

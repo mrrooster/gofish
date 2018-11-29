@@ -31,18 +31,15 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(
         D("Calling token refresh...");
         authenticate();
     });
+    this->inode=1;
     authenticate();
 }
 
 GoogleDrive::~GoogleDrive()
 {
-    auto keys = this->blockingLocks.keys();
-    while(!keys.isEmpty()) {
-        delete this->blockingLocks.take(keys.first());
-    }
 }
 
-void GoogleDrive::readRemoteFolder(QString path, QString parentId, GoogleDriveObject *target, quint64 token)
+void GoogleDrive::readRemoteFolder(QString path, QString parentId, quint64 token)
 {
     D("read remote folder."<<path);
     if (this->inflightPaths.contains(path)) {
@@ -54,28 +51,15 @@ void GoogleDrive::readRemoteFolder(QString path, QString parentId, GoogleDriveOb
     } else {
         this->inflightValues.insert(path,new QVector<QVariantMap>());
     }
-    QMutex *mtex = getBlockingLock(path);
-    mtex->lock();
     this->inflightPaths.append(path);
-    QMutexLocker lock(&this->preflightLock);
-    D("Removing path from preflight: "<<path<<mtex);
+    D("Removing path from preflight: "<<path);
     this->preflightPaths.removeOne(token);
     D("read remote folder.. locked."<<path);
-    readFolder(path,"",parentId,target);
-}
-
-QMutex *GoogleDrive::getBlockingLock(QString folder)
-{
-    QMutexLocker locker(&this->blockingLocksLock);
-    if (!this->blockingLocks.contains(folder)) {
-        this->blockingLocks.insert(folder,new QMutex());
-    }
-    return this->blockingLocks.value(folder);
+    readFolder(path,"",parentId);
 }
 
 quint64 GoogleDrive::addPathToPreFlightList(QString path)
 {
-    QMutexLocker lock(&this->preflightLock);
     quint64 token = this->requestToken++;
     D("Preflight path:"<<path<<", token:"<<token);
     this->preflightPaths.append(token);
@@ -84,7 +68,6 @@ quint64 GoogleDrive::addPathToPreFlightList(QString path)
 
 bool GoogleDrive::pathInPreflight(quint64 token)
 {
-    QMutexLocker lock(&this->preflightLock);
     return this->preflightPaths.contains(token);
 }
 
@@ -108,18 +91,15 @@ void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length,
     D("read remote file."<<id<<", token:"<<token);
 
 
-    getBlockingLock(id)->lock();
     this->inflightPaths.append(id);
     D("Removing path from preflight: "<<token);
-    QMutexLocker lock(&this->preflightLock);
     this->preflightPaths.removeOne(token);
     D("read remote file.. locked."<<id);
     //readFolder(path,path,"","");
     readFileSection(fileId,start,length);
-    return;
 }
 
-void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId, GoogleDriveObject *target)
+void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId)
 {
     D("readFolder: startPath:"<<startPath<<", parentId: "<<parentId<<", Next page token:"<<nextPageToken);
     QUrl url = files_list;
@@ -136,11 +116,10 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     }
     query += "&fields=files(name,size,mimeType,id,kind,createdTime,modifiedTime)";
     url.setQuery(query);
-    queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QByteArray responseData){
+    queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QByteArray responseData,bool found){
         //D("Read file response data:"<<responseData);
-        if (responseData.isEmpty()) {
-            D("Error'd/empty response. Releasing lock");
-            getBlockingLock(startPath)->unlock();
+        if (responseData.isEmpty()||!found) {
+            D("Error'd/empty response.");
             return;
         }
         QJsonDocument doc = QJsonDocument::fromJson(responseData);
@@ -177,25 +156,20 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                                     file["size"].toULongLong(),
                                     QDateTime::fromString(file["createdTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
                                     QDateTime::fromString(file["modifiedTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
-                                    target->getCache()
+                                    nullptr
                                    );
                         newChildren.append(newObj);
                     }
-                    target->setChildren(newChildren);
-                    QMutex *mtex = getBlockingLock(startPath);
-                    mtex->unlock();
-                    D("Releasing lock (drive)"<<startPath<<mtex);
+                    emit remoteFolder(startPath,newChildren);
+
+                    D("Releasing lock (drive)"<<startPath);
                     delete this->inflightValues.take(startPath);
                     return;
-                } else {
-                    getBlockingLock(startPath)->unlock();
                 }
             }
             if (doc["nextPageToken"].isString()) {
                 D("Has next page! :"<<doc["nextPageToken"].toString());
-                this->readFolder(startPath,doc["nextPageToken"].toString(),parentId,target);
-            } else {
-                getBlockingLock(startPath)->unlock();
+                this->readFolder(startPath,doc["nextPageToken"].toString(),parentId);
             }
         }
     });
@@ -213,16 +187,15 @@ void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
 
     extraHeaders.insert("Range",QString("bytes=%1-%2").arg(start).arg(start+length-1));
 
-    queueOp(QPair<QUrl,QVariantMap>(url,extraHeaders),[=](QByteArray responseData){
+    queueOp(QPair<QUrl,QVariantMap>(url,extraHeaders),[=](QByteArray responseData,bool found){
         this->pendingSegments.insert(id,responseData);
         D("Got file section response."<<responseData.size()<<responseData.left(200));
         this->inflightPaths.removeOne(id);
-        D("Releasing lock (file)"<<id);
-        getBlockingLock(id)->unlock();
+        emit pendingSegment(fileId,start,length);
     });
 }
 
-void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<void(QByteArray)> handler)
+void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<void(QByteArray,bool)> handler)
 {
     GoogleDriveOperation *operation = new GoogleDriveOperation();
 
@@ -242,7 +215,6 @@ void GoogleDrive::operationTimerFired()
         this->operationTimer.stop();
     } else {
         if (this->state == Connected) {
-            QMutexLocker lock(&this->oAuthLock);
             GoogleDriveOperation *op = this->queuedOps.takeFirst();
             if (!op->headers.isEmpty()) {
                 dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op->headers);
@@ -263,9 +235,16 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
         QByteArray responseData = response->readAll();
         D("Got response size:"<<responseData.size()<<", data:"<<responseData.left(40));
         if (response->error()==QNetworkReply::NoError && !responseData.isEmpty()) {
-            op->handler(responseData);
+            op->handler(responseData,true);
             delete op;
         } else {
+            if (response->error()==QNetworkReply::ContentNotFoundError) {
+                D("Not found.");
+                op->handler(QByteArray(),false);
+                delete op;
+                this->operationTimer.start();
+                return;
+            }
             if (response->error()==QNetworkReply::AuthenticationRequiredError) {
                 D("Authentication error, reauthing...");
                 setState(Disconnected);
@@ -276,7 +255,7 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
             op->retryCount++;
             if (op->retryCount>10) {
                 D("Abandoning request due to >10 retries.");
-                op->handler(QByteArray()); // Call the response with no data to prevent locks
+                op->handler(QByteArray(),false); // Call the response with no data to prevent locks
                 delete op;
             } else {
                 this->queuedOps.append(op);
@@ -309,7 +288,6 @@ QString GoogleDrive::sanitizeFilename(QString path)
 
 void GoogleDrive::authenticate()
 {
-    QMutexLocker lock(&this->oAuthLock);
     QSettings settings;
     settings.beginGroup("googledrive");
 

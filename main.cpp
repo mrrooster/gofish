@@ -7,7 +7,7 @@
 #include <QCommandLineParser>
 
 #include "google/googledrive.h"
-#include "fuse/fusethread.h"
+//include "fuse/fusethread.h"
 #include "fuse/fusehandler.h"
 
 #include <QDebug>
@@ -109,11 +109,11 @@ and 'secret' options.";
     if (fuseArgs.size()!=1 || parser.isSet(helpOpt)) {
         showHelp = true;
     } else {
-        fuseArgsData.append("-f");
+     //   fuseArgsData.append("-f");
 
         if (!parser.isSet(singleThreadedOpt)) {
             qInfo() << "Single threaded FUSE.";
-            fuseArgsData.append("-s");
+       //     fuseArgsData.append("-s");
         }
 
         if (parser.isSet(optionsOpt)) {

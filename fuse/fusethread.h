@@ -11,7 +11,7 @@
 #endif
 typedef unsigned long   vsize_t;
 typedef long int        register_t;
-#include <fuse.h>
+#include <fuse3/fuse.h>
 #include <unistd.h>
 
 class FuseThread : public QThread

@@ -12,7 +12,7 @@ public:
 
     QUrl url;
     QVariantMap headers;
-    std::function<void(QByteArray)> handler;
+    std::function<void(QByteArray,bool)> handler;
     int retryCount;
 };
 

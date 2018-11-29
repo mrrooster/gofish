@@ -8,7 +8,6 @@
 #include <QVector>
 #include <QJsonValue>
 #include <QJsonDocument>
-#include <QMutex>
 class GoogleDriveObject;
 
 class GoogleDrive : public QObject
@@ -20,7 +19,6 @@ public:
     explicit GoogleDrive(QObject *parent = nullptr);
     ~GoogleDrive();
 
-    QMutex *getBlockingLock(QString folder);
     quint64 addPathToPreFlightList(QString path);
     bool pathInPreflight(quint64 token);
     bool pathInFlight(QString path);
@@ -29,9 +27,11 @@ public:
 
 signals:
     void stateChanged(ConnectionState newState);
+    void remoteFolder(QString path, QVector<GoogleDriveObject*> children);
+    void pendingSegment(QString fileId, quint64 start, quint64 length);
 
 public slots:
-    void readRemoteFolder(QString path, QString parentId, GoogleDriveObject *target,quint64 token);
+    void readRemoteFolder(QString path, QString parentId, quint64 token);
     void getFileContents(QString fileId, quint64 start, quint64 length,quint64 token);
 
 private:
@@ -47,11 +47,7 @@ private:
     QVector<QString> inflightPaths;
     QVector<quint64> preflightPaths;
     QVector<GoogleDriveOperation*> queuedOps;
-    QMutex preflightLock;
-    QMutex oAuthLock;
-    QMutex blockingLocksLock;
 
-    QMap<QString,QMutex*> blockingLocks;
     QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;
 
     QString getRefreshToken();
@@ -60,10 +56,10 @@ private:
     void setRefreshToken(QString token);
     void setState(ConnectionState newState);
     void readFolder(QString startPath, QString path,QString nextPageToken,QString currentFolderId);
-    void readFolder(QString startPath, QString nextPageToken, QString parentId, GoogleDriveObject *target);
+    void readFolder(QString startPath, QString nextPageToken, QString parentId);
     void readFileSection(QString fileId, quint64 start, quint64 length);
 
-    void queueOp(QPair<QUrl,QVariantMap> urlAndHeaders,std::function<void(QByteArray)> handler);
+    void queueOp(QPair<QUrl,QVariantMap> urlAndHeaders,std::function<void(QByteArray,bool)> handler);
 private slots:
     void operationTimerFired();
     void requestFinished(QNetworkReply *response);
