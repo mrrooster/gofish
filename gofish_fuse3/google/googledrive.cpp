@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QJsonValue>
 #include <iostream>
+#include <QNetworkReply>
 #include "googledriveobject.h"
 #include "googlenetworkaccessmanager.h"
 #include "goauth2authorizationcodeflow.h"
@@ -302,6 +303,7 @@ void GoogleDrive::authenticate()
     if (this->auth) {
         QTimer::singleShot(600000,this->auth,&QObject::deleteLater);
     }
+    setState(Connecting);
     this->auth    = new GOAuth2AuthorizationCodeFlow(new GoogleNetworkAccessManager(this), this);
     auto *handler = new QOAuthHttpServerReplyHandler(this);
     this->auth->setReplyHandler(handler);
@@ -320,6 +322,12 @@ void GoogleDrive::authenticate()
         setState(Connected);
         setRefreshToken(tokens.value("refresh_token").toString());
         this->auth->resetStatus(QAbstractOAuth::Status::Granted);
+    });
+
+    connect(this->auth,&QOAuth2AuthorizationCodeFlow::finished,[=](QNetworkReply *reply){
+        if (this->state == Connecting && reply->isFinished() && reply->error()==QNetworkReply::ContentAccessDenied) {
+            this->setState(ConnectionFailed);
+        }
     });
 
     // Rewriting the refresh token request for google

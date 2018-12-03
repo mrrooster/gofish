@@ -14,7 +14,7 @@ class GoogleDrive : public QObject
 {
     Q_OBJECT
 public:
-    enum ConnectionState { Disconnected,Connected };
+    enum ConnectionState { Disconnected,Connecting,Connected,ConnectionFailed };
 
     explicit GoogleDrive(QObject *parent = nullptr);
     ~GoogleDrive();

@@ -41,7 +41,6 @@ int main(int argc, char *argv[])
     QCommandLineOption cacheSizeOpt("cache-bytes","Set the size of the in memory block cache in bytes. More memory good.","Bytes");
     QCommandLineOption dloadOpt("download-size","How much data to download in each request, this should be roughly a quater of your total download speed.","Bytes");
     QCommandLineOption foregroundOpt(QStringList({"f","foreground"}),"Run in the foreground");
-    QCommandLineOption singleThreadedOpt(QStringList({"m","multi-threaded"}),"Multi threaded fuse.");
     QCommandLineOption optionsOpt(QStringList({"o","options"}),"mount options for fuse, eg: ro,allow_other","Options");
     QCommandLineOption debugOpt(QStringList({"d","debug"}),"Turn on debugging output, implies -f");
     QCommandLineOption helpOpt(QStringList({"h","help"}),"Help. Show this help.");
@@ -51,7 +50,6 @@ int main(int argc, char *argv[])
     parser.addOption(helpOpt);
     parser.addVersionOption();
     parser.addOption(optionsOpt);
-    parser.addOption(singleThreadedOpt);
     parser.addOption(foregroundOpt);
     parser.addOption(debugOpt);
     parser.addOption(clientIdOpt);
@@ -110,12 +108,6 @@ and 'secret' options.";
         showHelp = true;
     } else {
      //   fuseArgsData.append("-f");
-
-        if (!parser.isSet(singleThreadedOpt)) {
-            qInfo() << "Single threaded FUSE.";
-       //     fuseArgsData.append("-s");
-        }
-
         if (parser.isSet(optionsOpt)) {
             fuseArgsData.append("-o");
             fuseArgsData.append(parser.value(optionsOpt).toLocal8Bit());
@@ -147,6 +139,8 @@ and 'secret' options.";
             if (!fuse) {
                 fuse = new FuseHandler(fuse_argc,fuse_argv,&googledrive);
             }
+        } else if (state==GoogleDrive::ConnectionFailed) {
+            QCoreApplication::exit(-1);
         }
     });
 
