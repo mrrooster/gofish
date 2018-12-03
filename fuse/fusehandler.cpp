@@ -35,7 +35,7 @@ FuseHandler::FuseHandler(int argc, char *argv[],GoogleDrive *gofish, QObject *pa
 
     connect(&this->eventTickTimer,&QTimer::timeout,this,&FuseHandler::eventTick);
     this->eventTickTimer.setSingleShot(false);
-    this->eventTickTimer.start(50);
+    this->eventTickTimer.start(5);
     connect(&this->timeOutTimer,&QTimer::timeout,this,&FuseHandler::timeOutTick);
     this->timeOutTimer.setSingleShot(false);
     this->timeOutTimer.start(OP_TIMEOUT_MSEC);
