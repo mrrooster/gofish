@@ -141,18 +141,12 @@ and 'secret' options.";
     }
 
     GoogleDrive googledrive;
-    FuseHandler *fuse;
+    FuseHandler *fuse=nullptr;
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {
-            fuse = new FuseHandler(fuse_argc,fuse_argv,&googledrive);
-            /*
-            qDebug() << "Drive connected, starting fuse thread...";
-            FuseThread *thread = new FuseThread(fuse_argc,fuse_argv,&googledrive);
-            QObject::connect(thread,&FuseThread::finished,thread,&FuseThread::deleteLater);
-            QObject::connect(thread,&FuseThread::finished,&googledrive,&FuseThread::deleteLater);
-            QObject::connect(thread,&FuseThread::finished,&a,&QCoreApplication::quit);
-            thread->start();
-            */
+            if (!fuse) {
+                fuse = new FuseHandler(fuse_argc,fuse_argv,&googledrive);
+            }
         }
     });
 

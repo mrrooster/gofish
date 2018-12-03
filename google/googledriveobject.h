@@ -13,7 +13,7 @@ class GoogleDriveObject : public QObject
 public:
     struct ReadData {
         QByteArray data;
-        quint64 start,length;
+        qint64 start,length,requestedLength;
     };
     explicit GoogleDriveObject(GoogleDrive *gofish, QCache<QString,QByteArray> *cache, QObject *parent = nullptr);
     explicit GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent=nullptr);
@@ -43,11 +43,11 @@ signals:
     void readData(QString fileId, quint64 start, quint64 offset, quint64 requestToken);
 
     void children(QVector<GoogleDriveObject*> children,quint64 requestToken);
-    void read(QByteArray data,quint64 requestToken);
+    void readResponse(QByteArray data,quint64 requestToken);
 
 private:
     int usageCount;
-    quint64 requestToken;
+    static quint64 requestToken;
     quint64 cacheChunkSize;
     quint64 readChunkSize;
     quint64 childFolderCount;
@@ -66,12 +66,16 @@ private:
     GoogleDrive *gofish;
     QCache<QString,QByteArray> *cache;
     QVector<GoogleDriveObject*> contents;
+    QVector<QPair<quint64,QVector<GoogleDriveObject*>>> contentsToSend;
     QMap<quint64,ReadData> readMap;
     QTimer readTimer;
+    QTimer emitTimer;
 
     void setupConnections();
-    void clearChildren();
+    void clearChildren(QVector<GoogleDriveObject*> except=QVector<GoogleDriveObject*>());
     void setupReadTimer();
+private slots:
+    void childEmitTImer();
 };
 
 QDebug operator<<(QDebug debug, const GoogleDriveObject &o);

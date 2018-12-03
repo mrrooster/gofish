@@ -205,7 +205,7 @@ void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<
     operation->retryCount = 0;
     this->queuedOps.append(operation);
     if (!this->operationTimer.isActive()) {
-        this->operationTimer.start(10);
+        this->operationTimer.start(REQUEST_TIMER_TICK_MSEC);
     }
 }
 
@@ -215,13 +215,18 @@ void GoogleDrive::operationTimerFired()
         this->operationTimer.stop();
     } else {
         if (this->state == Connected) {
-            GoogleDriveOperation *op = this->queuedOps.takeFirst();
-            if (!op->headers.isEmpty()) {
-                dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op->headers);
+            //D("************"<<this->inprogressOps.size());
+            if (this->inprogressOps.size()>REQUEST_MAX_INFLIGHT) {
+                D("More than "<<REQUEST_MAX_INFLIGHT<<"inflight.");
+            } else {
+                GoogleDriveOperation *op = this->queuedOps.takeFirst();
+                if (!op->headers.isEmpty()) {
+                    dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op->headers);
+                }
+                auto response = this->auth->get(op->url);
+                D("Got response: "<<response);
+                this->inprogressOps.insert(response,op);
             }
-            auto response = this->auth->get(op->url);
-            D("Got response: "<<response);
-            this->inprogressOps.insert(response,op);
         }
         this->operationTimer.start();
     }
@@ -229,7 +234,7 @@ void GoogleDrive::operationTimerFired()
 
 void GoogleDrive::requestFinished(QNetworkReply *response)
 {
-    D("REQUEST FIN:"<<response<<response->isFinished());
+//    D("REQUEST FIN:"<<response<<response->isFinished());
     if (this->inprogressOps.contains(response)) {
         auto op = this->inprogressOps.take(response);
         QByteArray responseData = response->readAll();
