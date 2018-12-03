@@ -212,7 +212,7 @@ void GoogleDriveObject::setupConnections()
 {
     connect(&this->emitTimer,&QTimer::timeout,this,&GoogleDriveObject::childEmitTImer);
     this->emitTimer.setSingleShot(false);
-    this->emitTimer.start(0);
+    this->emitTimer.start(100);
 //    connect(this,&GoogleDriveObject::readFolder,this->gofish,&GoogleDrive::readRemoteFolder);
 //    connect(this,&GoogleDriveObject::readData,this->gofish,&GoogleDrive::getFileContents);
 }
