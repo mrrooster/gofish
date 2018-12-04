@@ -19,20 +19,16 @@ public:
     explicit GoogleDrive(QObject *parent = nullptr);
     ~GoogleDrive();
 
-    quint64 addPathToPreFlightList(QString path);
-    bool pathInPreflight(quint64 token);
     bool pathInFlight(QString path);
     QByteArray getPendingSegment(QString fileId, quint64 start, quint64 length);
     quint64 getInodeForFileId(QString id);
+    quint64 readRemoteFolder(QString path, QString parentId);
+    quint64 getFileContents(QString fileId, quint64 start, quint64 length);
 
 signals:
     void stateChanged(ConnectionState newState);
     void remoteFolder(QString path, QVector<GoogleDriveObject*> children);
     void pendingSegment(QString fileId, quint64 start, quint64 length);
-
-public slots:
-    void readRemoteFolder(QString path, QString parentId, quint64 token);
-    void getFileContents(QString fileId, quint64 start, quint64 length,quint64 token);
 
 private:
     quint64 inode;
@@ -45,7 +41,6 @@ private:
     QMap<QString,QByteArray> pendingSegments;
     QMap<QString,quint64> inodeMap;
     QVector<QString> inflightPaths;
-    QVector<quint64> preflightPaths;
     QVector<GoogleDriveOperation*> queuedOps;
 
     QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;

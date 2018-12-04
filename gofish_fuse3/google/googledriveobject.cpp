@@ -82,12 +82,12 @@ QString GoogleDriveObject::getMimeType() const
     return this->mimeType;
 }
 
-quint64 GoogleDriveObject::getSize() const
+qint64 GoogleDriveObject::getSize() const
 {
     return this->size;
 }
 
-quint64 GoogleDriveObject::getChildFolderCount()
+qint64 GoogleDriveObject::getChildFolderCount()
 {
     //if (this->isFolder() && !this->populated) {
     //    getChildren();
@@ -102,7 +102,7 @@ quint64 GoogleDriveObject::getChildFolderCount()
  * You should request data in multiples of this value, from an offset that
  * is a multiple of this value, this allows the cacheing to work correctly.
  */
-quint64 GoogleDriveObject::getBlockSize()
+qint64 GoogleDriveObject::getBlockSize()
 {
     return this->cacheChunkSize;
 }
@@ -143,7 +143,7 @@ quint64 GoogleDriveObject::getChildren()
             D("Returning populated list..");
             this->contentsToSend.append(QPair<quint64,QVector<GoogleDriveObject*>>(token,this->contents));
         } else {
-            quint64 requestToken = this->gofish->addPathToPreFlightList(fullPath);
+            this->gofish->readRemoteFolder(fullPath,this->id);
 
             connect(this->gofish,&GoogleDrive::remoteFolder,[=](QString path,QVector<GoogleDriveObject*> children){
                 D("Got children of: "<<fullPath)<<path;
@@ -157,7 +157,7 @@ quint64 GoogleDriveObject::getChildren()
                 }
             });
 
-            this->gofish->readRemoteFolder(fullPath,this->id,requestToken);
+
         }
     }
     return token;
@@ -178,7 +178,7 @@ void GoogleDriveObject::setChildren(QVector<GoogleDriveObject *> newChildren)
     this->populated = true;
 }
 
-quint64 GoogleDriveObject::read(quint64 start, quint64 totalLength)
+qint64 GoogleDriveObject::read(qint64 start, qint64 totalLength)
 {
     quint64 token = this->requestToken++;
     ReadData readData;
@@ -261,7 +261,7 @@ void GoogleDriveObject::setupReadTimer()
 
                 if (!done && !this->isFolder()) {
                     QString readChunkId = QString("%1:%2:%3").arg(this->id).arg(data.start).arg(this->readChunkSize);
-                    quint64 requestToken = this->gofish->addPathToPreFlightList(readChunkId);
+                    this->gofish->getFileContents(this->id,data.start,this->readChunkSize);
                     connect(this->gofish,&GoogleDrive::pendingSegment,[=](QString fileId, quint64 start, quint64 length){
                         if (fileId==this->id && start==data.start && length==this->readChunkSize) {
                             QByteArray receivedData = this->gofish->getPendingSegment(this->id,data.start,this->readChunkSize);
@@ -303,7 +303,6 @@ void GoogleDriveObject::setupReadTimer()
                             }
                         }
                     });
-                    this->gofish->getFileContents(this->id,data.start,this->readChunkSize,requestToken);
                     data.length=0;
                 }
             }

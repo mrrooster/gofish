@@ -23,16 +23,16 @@ public:
     QString getName() const;
     QString getPath() const;
     QString getMimeType() const;
-    quint64 getSize() const;
-    quint64 getChildFolderCount();
-    quint64 getBlockSize();
+    qint64 getSize() const;
+    qint64 getChildFolderCount();
+    qint64 getBlockSize();
     quint64 getInode() const;
     void setInode(quint64 inode);
     QDateTime getCreatedTime();
     QDateTime getModifiedTime();
     quint64 getChildren();
     void setChildren(QVector<GoogleDriveObject*> newChildren);
-    quint64 read(quint64 start, quint64 totalLength);
+    qint64 read(qint64 start, qint64 totalLength);
     QCache<QString,QByteArray> *getCache() const;
     quint32 getRefreshSecs();
     void setCache(QCache<QString,QByteArray> *cache);
@@ -48,9 +48,9 @@ signals:
 private:
     int usageCount;
     static quint64 requestToken;
-    quint64 cacheChunkSize;
-    quint64 readChunkSize;
-    quint64 childFolderCount;
+    qint64 cacheChunkSize;
+    qint64 readChunkSize;
+    qint64 childFolderCount;
     bool populated;
     bool shouldDelete;
     QString mimeType;

@@ -40,12 +40,13 @@ GoogleDrive::~GoogleDrive()
 {
 }
 
-void GoogleDrive::readRemoteFolder(QString path, QString parentId, quint64 token)
+quint64 GoogleDrive::readRemoteFolder(QString path, QString parentId)
 {
     D("read remote folder."<<path);
+    quint64 token = this->requestToken++;
     if (this->inflightPaths.contains(path)) {
         D("Another request in progress.");
-        return;
+        return token;
     }
     if (this->inflightValues.contains(path)) {
         this->inflightValues.value(path)->clear();
@@ -53,23 +54,8 @@ void GoogleDrive::readRemoteFolder(QString path, QString parentId, quint64 token
         this->inflightValues.insert(path,new QVector<QVariantMap>());
     }
     this->inflightPaths.append(path);
-    D("Removing path from preflight: "<<path);
-    this->preflightPaths.removeOne(token);
-    D("read remote folder.. locked."<<path);
     readFolder(path,"",parentId);
-}
-
-quint64 GoogleDrive::addPathToPreFlightList(QString path)
-{
-    quint64 token = this->requestToken++;
-    D("Preflight path:"<<path<<", token:"<<token);
-    this->preflightPaths.append(token);
     return token;
-}
-
-bool GoogleDrive::pathInPreflight(quint64 token)
-{
-    return this->preflightPaths.contains(token);
 }
 
 bool GoogleDrive::pathInFlight(QString path)
@@ -86,18 +72,18 @@ QByteArray GoogleDrive::getPendingSegment(QString fileId, quint64 start, quint64
     return QByteArray();
 }
 
-void GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length, quint64 token)
+quint64 GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)
 {
     QString id = QString("%1:%2:%3").arg(fileId).arg(start).arg(length);
+    quint64 token = this->requestToken++;
     D("read remote file."<<id<<", token:"<<token);
 
 
     this->inflightPaths.append(id);
-    D("Removing path from preflight: "<<token);
-    this->preflightPaths.removeOne(token);
     D("read remote file.. locked."<<id);
     //readFolder(path,path,"","");
     readFileSection(fileId,start,length);
+    return token;
 }
 
 void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId)

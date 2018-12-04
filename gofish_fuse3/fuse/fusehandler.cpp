@@ -274,6 +274,12 @@ void FuseHandler::open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
     }
     D("Open inode"<<ino);
     fuse_reply_open(req,fi);
+    qint64 off = item->getSize() - (CACHE_CHUNK_SIZE*3);
+    if (off<0) {
+        off=0;
+    }
+    //item->read(off,item->getSize()-off);
+    //item->read(0,(CACHE_CHUNK_SIZE*3));
 }
 
 void FuseHandler::read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, fuse_file_info *fi)
@@ -347,6 +353,7 @@ void FuseHandler::eventTick()
 
         int ret = fuse_session_receive_buf(this->session,&buff);
         fuse_session_process_buf(this->session,&buff);
+	::free(buff.mem);
     }
 }
 
