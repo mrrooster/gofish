@@ -118,12 +118,11 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                     struct stat stbuf;
                     size += fuse_add_direntry(op.req,nullptr,0,".",nullptr,0);
                     size += fuse_add_direntry(op.req,nullptr,0,"..",nullptr,0);
-                    D("Pre loop size"<<size);
                     for(GoogleDriveObject *child : children) {
                         QByteArray nameData = child->getName().toUtf8();
                         size += fuse_add_direntry(op.req,nullptr,0,nameData.data(),nullptr,0);
                     }
-                    D("alloc:"<<size<<op.off<<op.size);
+                    D("alloc for dir info:"<<size<<op.off<<op.size);
                     char *dirBuff = new char[size];
                     memset(dirBuff,0,size);
                     quint64 off=0;
@@ -135,15 +134,15 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                         QByteArray nameData = child->getName().toUtf8();
                         stbuf.st_ino = child->getInode();
                         int len = fuse_add_direntry(op.req,nullptr,0,nameData.data(),nullptr,0);
-                        D("Fuse_add_dir: off:"<<off<<"size:"<<size<<"len:"<<len);
+                        //D("Fuse_add_dir: off:"<<off<<"size:"<<size<<"len:"<<len);
                         off += fuse_add_direntry(op.req,dirBuff+off,size-off,nameData.data(),&stbuf,off+len);
                     }
                     if (op.off>=size) {
                         fuse_reply_buf(op.req,nullptr,0);
-                        D("Sending empty entry.");
+                        //D("Sending empty entry.");
                     } else {
                         fuse_reply_buf(op.req,dirBuff+op.off,((size-op.off)<op.size?size-op.off:op.size));
-                        D("fuse_reply_buf: "<<"buff+"<<op.off<<((size-op.off)<op.size?(size-op.off):op.size));
+                        //D("fuse_reply_buf: "<<"buff+"<<op.off<<((size-op.off)<op.size?(size-op.off):op.size));
                     }
                     delete[] dirBuff;
                 } else if (op.op==Lookup) {
