@@ -172,3 +172,21 @@ void messageOutput(QtMsgType type, const QMessageLogContext &context, const QStr
     fflush(stderr);
     fflush(stdout);
 }
+
+QString byteCountString(qint64 bytes)
+{
+    QString suffix="B";
+
+    if (bytes>1024*1024*1024) {
+        suffix="GiB";
+        bytes=bytes/1024/1024/1024;
+    } else if (bytes>1024*1024*4) {
+        suffix="MiB";
+        bytes=bytes/1024/1024;
+    } else if (bytes>1234) {
+        suffix="KiB";
+        bytes=bytes/1024;
+    }
+
+    return QString("%0 %1").arg(bytes).arg(suffix);
+}

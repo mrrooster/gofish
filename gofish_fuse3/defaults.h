@@ -13,5 +13,6 @@
 #define DEFAULT_CACHE_SIZE (1024*1024*128) // 128mb
 #define DEFAULT_REFRESH_SECS 600
 
-
+//#include <QString>
+//QString byteCountString(qint64 bytes);
 #endif // DEFAULTS_H

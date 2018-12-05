@@ -50,6 +50,7 @@ private:
     static quint64 requestToken;
     qint64 cacheChunkSize;
     qint64 readChunkSize;
+    qint64 maxReadChunkSize;
     qint64 childFolderCount;
     bool populated;
     bool shouldDelete;

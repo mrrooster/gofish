@@ -26,8 +26,8 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString pa
     populated(false)
 {
     Q_ASSERT(READ_CHUNK_SIZE%CACHE_CHUNK_SIZE == 0);
-    this->readChunkSize = READ_CHUNK_SIZE;
-    this->cacheChunkSize= CACHE_CHUNK_SIZE;
+    this->maxReadChunkSize = READ_CHUNK_SIZE;
+    this->cacheChunkSize   = this->readChunkSize = CACHE_CHUNK_SIZE;
 
     this->gofish   = gofish;
     this->cache    = cache;
@@ -47,8 +47,8 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString pa
     quint32 chunkSize = settings.value("download_chunk_bytes",READ_CHUNK_SIZE).toUInt();
     if (chunkSize>this->cacheChunkSize) {
         int mult = chunkSize/this->cacheChunkSize;
-        this->readChunkSize = (mult?mult:1)*this->cacheChunkSize;
-        D("Set read size:"<<this->readChunkSize);
+        this->maxReadChunkSize = (mult?mult:1)*this->cacheChunkSize;
+        D("Set read size:"<<this->maxReadChunkSize);
     }
 
     setupConnections();
@@ -238,7 +238,7 @@ void GoogleDriveObject::setupReadTimer()
             D("Read:"<<data.start<<data.length<<getPath()<<"Filesize:"<<getSize());
 
             while(data.length>0) {
-                quint64 msecs = this->mtime.toMSecsSinceEpoch();
+                qint64 msecs = this->mtime.toMSecsSinceEpoch();
                 QString chunkId = QString("%1:%2:%3:%4").arg(this->id).arg(data.start).arg(this->cacheChunkSize).arg(msecs);
 
                 D("READ chunk id:"<<chunkId);
@@ -260,11 +260,11 @@ void GoogleDriveObject::setupReadTimer()
                 }
 
                 if (!done && !this->isFolder()) {
-                    QString readChunkId = QString("%1:%2:%3").arg(this->id).arg(data.start).arg(this->readChunkSize);
-                    this->gofish->getFileContents(this->id,data.start,this->readChunkSize);
+                    qint64 currentReadChunkSize = this->readChunkSize;
+                    this->gofish->getFileContents(this->id,data.start,currentReadChunkSize);
                     connect(this->gofish,&GoogleDrive::pendingSegment,[=](QString fileId, quint64 start, quint64 length){
-                        if (fileId==this->id && start==data.start && length==this->readChunkSize) {
-                            QByteArray receivedData = this->gofish->getPendingSegment(this->id,data.start,this->readChunkSize);
+                        if (fileId==this->id && start==data.start && length==currentReadChunkSize) {
+                            QByteArray receivedData = this->gofish->getPendingSegment(this->id,data.start,currentReadChunkSize);
                             ReadData myData = data;
                             D("Got data: ,"<<receivedData.size());
 			    Q_ASSERT(myData.start==start);
@@ -303,6 +303,12 @@ void GoogleDriveObject::setupReadTimer()
                             }
                         }
                     });
+                    if (this->readChunkSize<this->maxReadChunkSize) {
+                        int multiplier=1;
+                        for(;(this->cacheChunkSize*multiplier)<(this->maxReadChunkSize-this->readChunkSize)&&multiplier<7;multiplier++) ;
+                        this->readChunkSize += (this->cacheChunkSize*multiplier);
+                        //D("read chunk size now:"<<::byteCountString(this->readChunkSize));
+                    }
                     data.length=0;
                 }
             }
