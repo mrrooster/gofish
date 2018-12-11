@@ -15,8 +15,8 @@ public:
         QByteArray data;
         qint64 start,length,requestedLength;
     };
-    explicit GoogleDriveObject(GoogleDrive *gofish, QCache<QString,QByteArray> *cache, QObject *parent = nullptr);
-    explicit GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent=nullptr);
+    explicit GoogleDriveObject(GoogleDrive *gofish, QCache<QString,QByteArray> *cache, QTimer *emitTimer,QObject *parent = nullptr);
+    explicit GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache,QTimer *emitTimer, QObject *parent=nullptr);
     ~GoogleDriveObject();
 
     bool isFolder() const;
@@ -70,7 +70,7 @@ private:
     QVector<QPair<quint64,QVector<GoogleDriveObject*>>> contentsToSend;
     QMap<quint64,ReadData> readMap;
     QTimer readTimer;
-    QTimer emitTimer;
+    QTimer *emitTimer;
 
     void setupConnections();
     void clearChildren(QVector<GoogleDriveObject*> except=QVector<GoogleDriveObject*>());

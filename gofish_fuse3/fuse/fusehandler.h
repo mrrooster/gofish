@@ -78,5 +78,7 @@ private slots:
 };
 
 bool operator==(const FuseHandler::InflightOp &a,const FuseHandler::InflightOp &b);
+QDebug operator<<(QDebug debug, const FuseHandler::InflightOp &o);
+QDebug operator<<(QDebug debug, const struct stat &o);
 
 #endif // FUSEHANDLER_H

@@ -63,7 +63,8 @@ void FuseHandler::initRoot()
     this->inodeToDir.clear();
     this->root  = new GoogleDriveObject(
                 this->gofish,
-                this->cache
+                this->cache,
+                this->gofish->getEmitTimer()
                 );
     this->root->setInode(1);
     addObjectForInode(this->root);
@@ -105,7 +106,7 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
     if (!this->connectedObjects.contains(obj)) {
         this->connectedObjects.append(obj);
         connect(obj,&GoogleDriveObject::children,this,[=](QVector<GoogleDriveObject*> children,quint64 requestToken){
-            D("In children handler, token:"<<requestToken);
+            D("In children handler, token:"<<requestToken<<obj->getPath());
             if (this->inflightOpMap.contains(requestToken)) {
                 InflightOp op = this->inflightOpMap.take(requestToken);
                 this->inflightOpList.removeOne(op);
@@ -114,16 +115,15 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                     this->addObjectForInode(child);
                 }
                 if (op.op==ReadDir) {
+                    D("ReadDir op"<<op);
                     qint64 size = 0;
                     struct stat stbuf;
                     size += fuse_add_direntry(op.req,nullptr,0,".",nullptr,0);
                     size += fuse_add_direntry(op.req,nullptr,0,"..",nullptr,0);
-                    D("Pre loop size"<<size);
                     for(GoogleDriveObject *child : children) {
                         QByteArray nameData = child->getName().toUtf8();
                         size += fuse_add_direntry(op.req,nullptr,0,nameData.data(),nullptr,0);
                     }
-                    D("alloc:"<<size<<op.off<<op.size);
                     char *dirBuff = new char[size];
                     memset(dirBuff,0,size);
                     quint64 off=0;
@@ -133,28 +133,28 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                     off += fuse_add_direntry(op.req,dirBuff+off,size-off,"..",&stbuf,2);
                     for(GoogleDriveObject *child : children) {
                         QByteArray nameData = child->getName().toUtf8();
-                        stbuf.st_ino = child->getInode();
+                        setupStat(child,&stbuf);
                         int len = fuse_add_direntry(op.req,nullptr,0,nameData.data(),nullptr,0);
-                        D("Fuse_add_dir: off:"<<off<<"size:"<<size<<"len:"<<len);
+                        //D("Fuse_add_dir: off:"<<off<<"size:"<<size<<"len:"<<len<<"name:"<<nameData);
                         off += fuse_add_direntry(op.req,dirBuff+off,size-off,nameData.data(),&stbuf,off+len);
                     }
                     if (op.off>=size) {
                         fuse_reply_buf(op.req,nullptr,0);
-                        D("Sending empty entry.");
+                       // D("Sending empty entry.");
                     } else {
                         fuse_reply_buf(op.req,dirBuff+op.off,((size-op.off)<op.size?size-op.off:op.size));
-                        D("fuse_reply_buf: "<<"buff+"<<op.off<<((size-op.off)<op.size?(size-op.off):op.size));
+                       // D("fuse_reply_buf: "<<"buff+"<<op.off<<((size-op.off)<op.size?(size-op.off):op.size));
                     }
                     delete[] dirBuff;
                 } else if (op.op==Lookup) {
-                    D("Lookup");
+                    D("Lookup for op:"<<op);
                     for(GoogleDriveObject *child : children) {
                         if (child->getName()==op.name) {
                             D("Entry found");
                             struct fuse_entry_param ent;
                             memset(&ent,0,sizeof(ent));
                             ent.ino = child->getInode();
-                            ent.generation = 0;
+                            ent.generation = 1;
                             setupStat(child,&ent.attr);
                             ent.attr_timeout=60;
                             ent.entry_timeout=60;
@@ -168,7 +168,7 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
             D("Leaving child handler");
         });
         connect(obj,&GoogleDriveObject::readResponse,[=](QByteArray data,quint64 requestToken){
-            D("Read resonse, token:"<<requestToken);
+            D("Read resopnse, token:"<<requestToken);
             if (this->inflightOpMap.contains(requestToken)) {
                 D("Found inflight response.");
                 InflightOp op = this->inflightOpMap.take(requestToken);
@@ -182,7 +182,7 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
 
 void FuseHandler::addOp(FuseHandler::InflightOp &op)
 {
-    D("Add op:"<<op.time<<op.op<<", token:"<<op.token);
+    D("Add op:"<<op);
     this->inflightOpList.append(op);
     this->inflightOpMap.insert(op.token,op);
 }
@@ -193,9 +193,9 @@ void FuseHandler::setupStat(GoogleDriveObject *item, struct stat *stbuf)
 
     stbuf->st_mode= 0555;
     if (item->isFolder()) {
-        //D("Thingy is dir.");
+//        D("Entry is directory:"<<item->getName()<<", children:"<<item->getChildFolderCount());
         stbuf->st_mode |= S_IFDIR;
-        stbuf->st_size = 0;
+        stbuf->st_size = 512;
         stbuf->st_nlink = 2 + item->getChildFolderCount();
     } else {
       //  D("Thingy is regular file.");
@@ -203,12 +203,13 @@ void FuseHandler::setupStat(GoogleDriveObject *item, struct stat *stbuf)
         stbuf->st_size = item->getSize();
         stbuf->st_nlink = 1;
     }
-    stbuf->st_rdev = S_IFCHR;
+    //stbuf->st_rdev = S_IFCHR;
     stbuf->st_ctime= item->getCreatedTime().toTime_t();
     stbuf->st_mtime= item->getCreatedTime().toTime_t();
     stbuf->st_ino  = item->getInode();
     stbuf->st_uid = ::getuid();
     stbuf->st_gid = ::getgid();
+//    D("setupStat:"<<*stbuf);
 }
 
 void FuseHandler::lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
@@ -221,7 +222,8 @@ void FuseHandler::lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     op.inode = parent;
     GoogleDriveObject *dir = this->inodeToDir.value(parent);
     if (!dir) {
-        fuse_reply_err(req, ENOTDIR);
+        D("Lookup fail!");
+        fuse_reply_err(req, ENOENT);
         return;
     }
     op.token = dir->getChildren();
@@ -251,10 +253,11 @@ void FuseHandler::readDir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off
 
 void FuseHandler::getAttr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
 {
-    D("GETATTR"<<ino);
+    D("getAttr, Inode:"<<ino);
 
     GoogleDriveObject *item = this->inodeToDir.value(ino);
     if (!item) {
+        D("Returning ENOENT, for inode:"<<ino);
         fuse_reply_err(req, ENOENT);
         return;
     }
@@ -313,7 +316,6 @@ void FuseHandler::fuse_destroy(void *userdata)
 
 void FuseHandler::fuse_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
-    SD("In fuse lookup");
     reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->lookup(req,parent,name);
 }
 
@@ -324,7 +326,6 @@ void FuseHandler::fuse_read_dir(fuse_req_t req, fuse_ino_t ino, size_t size, off
 
 void FuseHandler::fuse_get_attr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
 {
-    SD("Fuse getatt");
     reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->getAttr(req,ino,fi);
 }
 
@@ -382,4 +383,42 @@ bool operator==(const FuseHandler::InflightOp &a, const FuseHandler::InflightOp 
         }
     }
     return ret;
+}
+
+QDebug operator<<(QDebug debug, const FuseHandler::InflightOp &o)
+{
+    QDebugStateSaver s(debug);
+
+    /*
+     *         Operation op;
+        qint64 time;
+        fuse_req_t req;
+        QString name;
+        fuse_ino_t inode;
+        size_t size;
+        off_t off;
+        quint64 token;
+        */
+    debug.nospace()
+            << "[Op:" << (o.op == FuseHandler::ReadDir?"ReadDir": o.op==FuseHandler::Lookup ? "Lookup" : "Read")
+            << ", Time: "<< o.time
+            << ", Name: "<< o.name
+            << ", Inode: "<< o.inode
+            << ", Size: "<<o.size
+            << ", off: "<< o.off
+            << ", Token: "<<o.token << "]";
+    return debug;
+}
+
+QDebug operator<<(QDebug debug, const struct stat &o)
+{
+    QDebugStateSaver s(debug);
+    debug.nospace()
+            << "[Stat:"
+            << ", inode:"<<o.st_ino
+            << ", mode:"<<o.st_mode
+            << ", size:"<<o.st_size
+            << ", links:"<<o.st_nlink
+            << "]";
+    return debug;
 }

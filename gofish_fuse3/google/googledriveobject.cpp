@@ -16,12 +16,12 @@
 #endif
 quint64 GoogleDriveObject::requestToken  = 0l;
 
-GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QCache<QString, QByteArray> *cache, QObject *parent) :
-    GoogleDriveObject::GoogleDriveObject(gofish,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),cache,parent)
+GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QCache<QString, QByteArray> *cache, QTimer *emitTimer, QObject *parent) :
+    GoogleDriveObject::GoogleDriveObject(gofish,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),cache,emitTimer,parent)
 {
 }
 
-GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent) :
+GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QTimer *emitTimer, QObject *parent) :
     QObject(parent),
     populated(false)
 {
@@ -41,6 +41,7 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString pa
     this->inode    = gofish->getInodeForFileId(this->id.isEmpty()?getPath():this->id);
     this->childFolderCount = 0;
     this->usageCount = 0;
+    this->emitTimer = emitTimer;
 
     QSettings settings;
     settings.beginGroup("googledrive");
@@ -143,6 +144,7 @@ quint64 GoogleDriveObject::getChildren()
             D("Returning populated list..");
             this->contentsToSend.append(QPair<quint64,QVector<GoogleDriveObject*>>(token,this->contents));
         } else {
+            D("Fetching remotely..."<<fullPath<<this->id);
             this->gofish->readRemoteFolder(fullPath,this->id);
 
             connect(this->gofish,&GoogleDrive::remoteFolder,[=](QString path,QVector<GoogleDriveObject*> children){
@@ -210,9 +212,7 @@ void GoogleDriveObject::setCache(QCache<QString, QByteArray> *cache)
 
 void GoogleDriveObject::setupConnections()
 {
-    connect(&this->emitTimer,&QTimer::timeout,this,&GoogleDriveObject::childEmitTImer);
-    this->emitTimer.setSingleShot(false);
-    this->emitTimer.start(5);
+    connect(this->emitTimer,&QTimer::timeout,this,&GoogleDriveObject::childEmitTImer);
 //    connect(this,&GoogleDriveObject::readFolder,this->gofish,&GoogleDrive::readRemoteFolder);
 //    connect(this,&GoogleDriveObject::readData,this->gofish,&GoogleDrive::getFileContents);
 }

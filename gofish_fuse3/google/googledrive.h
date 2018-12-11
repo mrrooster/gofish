@@ -24,6 +24,7 @@ public:
     quint64 getInodeForFileId(QString id);
     quint64 readRemoteFolder(QString path, QString parentId);
     quint64 getFileContents(QString fileId, quint64 start, quint64 length);
+    QTimer *getEmitTimer();
 
 signals:
     void stateChanged(ConnectionState newState);
@@ -42,6 +43,7 @@ private:
     QMap<QString,quint64> inodeMap;
     QVector<QString> inflightPaths;
     QVector<GoogleDriveOperation*> queuedOps;
+    QTimer emitTimer;
 
     QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;
 

@@ -20,9 +20,6 @@ bool g_debug = false;
 int main(int argc, char *argv[])
 {
     g_startTime = QDateTime::currentMSecsSinceEpoch();
-#ifdef QT_DEBUG
-    g_debug = true;
-#endif
     QCoreApplication::setOrganizationDomain("gofish.ohmyno.co.uk");
     QCoreApplication::setApplicationName("GoFiSh");
     QCoreApplication::setApplicationVersion(QString("%1 build date: %2 %3 %4")
