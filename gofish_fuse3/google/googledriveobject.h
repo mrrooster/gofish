@@ -15,8 +15,8 @@ public:
         QByteArray data;
         qint64 start,length,requestedLength;
     };
-    explicit GoogleDriveObject(GoogleDrive *gofish, QCache<QString,QByteArray> *cache, QTimer *emitTimer,QObject *parent = nullptr);
-    explicit GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache,QTimer *emitTimer, QObject *parent=nullptr);
+    explicit GoogleDriveObject(GoogleDrive *gofish, QCache<QString,QByteArray> *cache, QObject *parent = nullptr);
+    explicit GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache,QObject *parent=nullptr);
     ~GoogleDriveObject();
 
     bool isFolder() const;
@@ -63,20 +63,21 @@ private:
     QDateTime mtime;
     qint64 updated;
     quint64 inode;
+    QString temporaryFile; // If not empty, file is disc backed
+    QIODevice::OpenMode openMode; // Only used for open for write
+    qint64 pos;
 
     GoogleDrive *gofish;
     QCache<QString,QByteArray> *cache;
     QVector<GoogleDriveObject*> contents;
-    QVector<QPair<quint64,QVector<GoogleDriveObject*>>> contentsToSend;
     QMap<quint64,ReadData> readMap;
     QTimer readTimer;
-    QTimer *emitTimer;
+    QVector<quint64> tokenList;
 
-    void setupConnections();
     void clearChildren(QVector<GoogleDriveObject*> except=QVector<GoogleDriveObject*>());
     void setupReadTimer();
 private slots:
-    void childEmitTImer();
+    void processRemoteFolder(QString path, QVector<GoogleDriveObject*> children);
 };
 
 QDebug operator<<(QDebug debug, const GoogleDriveObject &o);

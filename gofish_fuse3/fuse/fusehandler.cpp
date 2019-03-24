@@ -1,13 +1,15 @@
 #include "fusehandler.h"
 #include <poll.h>
+#include <errno.h>
 #include <QSettings>
 #include <QCoreApplication>
+#include <QThread>
 
 #include "defaults.h"
 
 #define DEBUG_FUSE
 #ifdef DEBUG_FUSE
-#define D(x) qDebug() << QString("[FuseHandler]").toUtf8().data() << x
+#define D(x) qDebug() << QString("[FuseHandler %1]").arg(this->pollDelay)   .toUtf8().data() << x
 #define SD(x) qDebug() << QString("[FuseHandler::static]") << x
 #else
 #define D(x)
@@ -16,7 +18,8 @@
 
 FuseHandler::FuseHandler(int argc, char *argv[],GoogleDrive *gofish, QObject *parent) : QObject(parent),
 	root(nullptr),
-    cache(nullptr)
+    cache(nullptr),
+    pollDelay(0)
 {
     memset(&this->ops,0,sizeof(this->ops));
     //this->ops.init    = FuseHandler::fuse_init;
@@ -34,8 +37,8 @@ FuseHandler::FuseHandler(int argc, char *argv[],GoogleDrive *gofish, QObject *pa
     initFuse(argc,argv);
 
     connect(&this->eventTickTimer,&QTimer::timeout,this,&FuseHandler::eventTick);
-    this->eventTickTimer.setSingleShot(false);
-    this->eventTickTimer.start(5);
+    this->eventTickTimer.setSingleShot(true);
+    this->eventTickTimer.start(0);
     connect(&this->timeOutTimer,&QTimer::timeout,this,&FuseHandler::timeOutTick);
     this->timeOutTimer.setSingleShot(false);
     this->timeOutTimer.start(OP_TIMEOUT_MSEC);
@@ -63,9 +66,8 @@ void FuseHandler::initRoot()
     this->inodeToDir.clear();
     this->root  = new GoogleDriveObject(
                 this->gofish,
-                this->cache,
-                this->gofish->getEmitTimer()
-                );
+                this->cache
+    );
     this->root->setInode(1);
     addObjectForInode(this->root);
 }
@@ -271,11 +273,13 @@ void FuseHandler::getAttr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
 void FuseHandler::open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
 {
     GoogleDriveObject *item = this->inodeToDir.value(ino);
-    if (!item) {
+    bool write = (fi->flags & O_WRONLY) | (fi->flags & O_RDWR);
+
+    D("Open inode"<<ino<<write);
+    if (!item && !write) {
         fuse_reply_err(req, ENOENT);
         return;
     }
-    D("Open inode"<<ino);
     fuse_reply_open(req,fi);
     qint64 off = item->getSize() - (CACHE_CHUNK_SIZE*3);
     if (off<0) {
@@ -302,6 +306,11 @@ void FuseHandler::read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, f
     op.token = item->read(off,size);
     op.op = Read;
     addOp(op);
+}
+
+void FuseHandler::write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, fuse_file_info *fi)
+{
+    D("In write");
 }
 
 void FuseHandler::fuse_init(void *userdata,struct fuse_conn_info *conn)
@@ -339,6 +348,11 @@ void FuseHandler::fuse_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t o
     reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->read(req,ino,size,off,fi);
 }
 
+void FuseHandler::fuse_write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, fuse_file_info *fi)
+{
+    reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->write(req,ino,buf,size,off,fi);
+}
+
 void FuseHandler::eventTick()
 {
     int fd = fuse_session_fd(this->session);
@@ -347,6 +361,7 @@ void FuseHandler::eventTick()
     fds[0].fd = fd;
     fds[0].events = POLLIN;
     fds[0].revents= 0;
+    this->pollDelay += (this->pollDelay)<100?1:0;
     if (::poll((struct pollfd*)&fds,1,0)>0) {
         struct fuse_buf buff;
 
@@ -354,8 +369,11 @@ void FuseHandler::eventTick()
 
         int ret = fuse_session_receive_buf(this->session,&buff);
         fuse_session_process_buf(this->session,&buff);
-	::free(buff.mem);
+        ::free(buff.mem);
+        this->pollDelay=0;
     }
+    QThread::yieldCurrentThread();
+    this->eventTickTimer.start(this->pollDelay);
 }
 
 void FuseHandler::timeOutTick()

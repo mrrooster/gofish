@@ -34,8 +34,7 @@ GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(
     });
     this->inode=1;
     authenticate();
-    this->emitTimer.setSingleShot(false);
-    this->emitTimer.start(1);
+
 }
 
 GoogleDrive::~GoogleDrive()
@@ -86,11 +85,6 @@ quint64 GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 leng
     //readFolder(path,path,"","");
     readFileSection(fileId,start,length);
     return token;
-}
-
-QTimer *GoogleDrive::getEmitTimer()
-{
-    return &this->emitTimer;
 }
 
 void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId)
@@ -150,8 +144,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                                     file["size"].toULongLong(),
                                     QDateTime::fromString(file["createdTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
                                     QDateTime::fromString(file["modifiedTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
-                                    nullptr,
-                                    &this->emitTimer
+                                    nullptr
                                    );
                         newChildren.append(newObj);
                     }

@@ -16,14 +16,15 @@
 #endif
 quint64 GoogleDriveObject::requestToken  = 0l;
 
-GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QCache<QString, QByteArray> *cache, QTimer *emitTimer, QObject *parent) :
-    GoogleDriveObject::GoogleDriveObject(gofish,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),cache,emitTimer,parent)
+GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QCache<QString, QByteArray> *cache,  QObject *parent) :
+    GoogleDriveObject::GoogleDriveObject(gofish,"","","",GOOGLE_FOLDER,0,QDateTime::currentDateTimeUtc(),QDateTime::currentDateTimeUtc(),cache,parent)
 {
 }
 
-GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QTimer *emitTimer, QObject *parent) :
+GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent) :
     QObject(parent),
-    populated(false)
+    populated(false),
+    openMode(QIODevice::NotOpen)
 {
     Q_ASSERT(READ_CHUNK_SIZE%CACHE_CHUNK_SIZE == 0);
     this->maxReadChunkSize = READ_CHUNK_SIZE;
@@ -41,7 +42,6 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString pa
     this->inode    = gofish->getInodeForFileId(this->id.isEmpty()?getPath():this->id);
     this->childFolderCount = 0;
     this->usageCount = 0;
-    this->emitTimer = emitTimer;
 
     QSettings settings;
     settings.beginGroup("googledrive");
@@ -52,8 +52,9 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString pa
         D("Set read size:"<<this->maxReadChunkSize);
     }
 
-    setupConnections();
     setupReadTimer();
+
+    connect(this->gofish,&GoogleDrive::remoteFolder,this,&GoogleDriveObject::processRemoteFolder);
 
     D("New google object: "<<*this);
 }
@@ -142,24 +143,17 @@ quint64 GoogleDriveObject::getChildren()
     if (this->isFolder()) {
         if (this->populated) {
             D("Returning populated list..");
-            this->contentsToSend.append(QPair<quint64,QVector<GoogleDriveObject*>>(token,this->contents));
+            //this->contentsToSend.append(QPair<quint64,QVector<GoogleDriveObject*>>(token,this->contents));
+            this->tokenList.append(token);
+            QTimer::singleShot(1,this,[&](){
+                while(!this->tokenList.isEmpty()) {
+                    emit this->children(this->contents,this->tokenList.takeFirst());
+                }
+            });
         } else {
             D("Fetching remotely..."<<fullPath<<this->id);
             this->gofish->readRemoteFolder(fullPath,this->id);
-
-            connect(this->gofish,&GoogleDrive::remoteFolder,[=](QString path,QVector<GoogleDriveObject*> children){
-                D("Got children of: "<<fullPath)<<path;
-                if (path==fullPath) {
-                    for(GoogleDriveObject *child:children) {
-                        child->setCache(this->getCache());
-                    }
-                    this->setChildren(children);
-                    //emit this->children(children,token);
-                    this->contentsToSend.append(QPair<quint64,QVector<GoogleDriveObject*>>(token,children));
-                }
-            });
-
-
+            this->tokenList.append(token);
         }
     }
     return token;
@@ -208,13 +202,6 @@ QCache<QString, QByteArray> *GoogleDriveObject::getCache() const
 void GoogleDriveObject::setCache(QCache<QString, QByteArray> *cache)
 {
     this->cache = cache;
-}
-
-void GoogleDriveObject::setupConnections()
-{
-    connect(this->emitTimer,&QTimer::timeout,this,&GoogleDriveObject::childEmitTImer);
-//    connect(this,&GoogleDriveObject::readFolder,this->gofish,&GoogleDrive::readRemoteFolder);
-//    connect(this,&GoogleDriveObject::readData,this->gofish,&GoogleDrive::getFileContents);
 }
 
 void GoogleDriveObject::clearChildren(QVector<GoogleDriveObject*> except)
@@ -317,14 +304,25 @@ void GoogleDriveObject::setupReadTimer()
     });
 }
 
-void GoogleDriveObject::childEmitTImer()
+void GoogleDriveObject::processRemoteFolder(QString path, QVector<GoogleDriveObject *> children)
 {
-    while(!this->contentsToSend.isEmpty()) {
-        QPair<quint64,QVector<GoogleDriveObject*>> signal = this->contentsToSend.takeFirst();
-        emit this->children(signal.second,signal.first);
+    D("Got children of: "<<getPath()<<path);
+    if (path==getPath()) {
+        for(GoogleDriveObject *child:children) {
+            child->setCache(this->getCache());
+        }
+        this->setChildren(children);
+        if (!this->tokenList.empty()) {
+
+//            QTimer::singleShot(1,this,[&](){
+                while(!this->tokenList.isEmpty()) {
+                    emit this->children(this->contents,this->tokenList.takeFirst());
+                }
+//            });
+        }
+        //this->contentsToSend.append(QPair<quint64,QVector<GoogleDriveObject*>>(token,children));
     }
 }
-
 
 QDebug operator<<(QDebug debug, const GoogleDriveObject &o)
 {

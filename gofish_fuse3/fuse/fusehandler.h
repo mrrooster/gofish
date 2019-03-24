@@ -49,6 +49,7 @@ private:
     QVector<InflightOp> inflightOpList;
     QMap<quint64,InflightOp> inflightOpMap;
     QCache<QString,QByteArray> *cache;
+    int pollDelay;
 
     void initRoot();
     void initFuse(int argc, char *argv[]);
@@ -62,7 +63,7 @@ private:
     void getAttr(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     void open(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     void read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
-
+    void write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *fi);
     // fuse callbacks
     static void fuse_init(void *userdata, struct fuse_conn_info *conn);
     static void fuse_destroy(void *userdata);
@@ -71,6 +72,7 @@ private:
     static void fuse_get_attr(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     static void fuse_open(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     static void fuse_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
+    static void fuse_write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *fi);
 
 private slots:
     void eventTick();
