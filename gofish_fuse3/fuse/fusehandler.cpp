@@ -313,6 +313,11 @@ void FuseHandler::write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t 
     D("In write");
 }
 
+void FuseHandler::create(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode, fuse_file_info *fi)
+{
+    D("In create");
+}
+
 void FuseHandler::fuse_init(void *userdata,struct fuse_conn_info *conn)
 {
     SD("In fuse_init");
@@ -353,6 +358,11 @@ void FuseHandler::fuse_write(fuse_req_t req, fuse_ino_t ino, const char *buf, si
     reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->write(req,ino,buf,size,off,fi);
 }
 
+void FuseHandler::fuse_create(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode, fuse_file_info *fi)
+{
+    reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->create(req,parent,name,mode,fi);
+}
+
 void FuseHandler::eventTick()
 {
     int fd = fuse_session_fd(this->session);
@@ -361,7 +371,7 @@ void FuseHandler::eventTick()
     fds[0].fd = fd;
     fds[0].events = POLLIN;
     fds[0].revents= 0;
-    this->pollDelay += (this->pollDelay)<100?1:0;
+    this->pollDelay += (this->pollDelay)<1000?1:0;
     if (::poll((struct pollfd*)&fds,1,0)>0) {
         struct fuse_buf buff;
 
@@ -373,7 +383,7 @@ void FuseHandler::eventTick()
         this->pollDelay=0;
     }
     QThread::yieldCurrentThread();
-    this->eventTickTimer.start(this->pollDelay);
+    this->eventTickTimer.start(this->pollDelay/10);
 }
 
 void FuseHandler::timeOutTick()
