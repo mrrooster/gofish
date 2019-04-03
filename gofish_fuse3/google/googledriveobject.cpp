@@ -217,6 +217,22 @@ qint64 GoogleDriveObject::read(qint64 start, qint64 totalLength)
 
 }
 
+void GoogleDriveObject::write(QByteArray data, qint64 start)
+{
+    if (this->temporaryFile) {
+        if (start<=this->temporaryFile->size()) {
+            if (this->temporaryFile->open(QIODevice::ReadWrite)) {
+                this->temporaryFile->seek(start);
+                this->temporaryFile->write(data);
+                this->temporaryFile->close();
+                if (this->temporaryFile->size()>this->size) {
+                    this->size=this->temporaryFile->size();
+                }
+            }
+        }
+    }
+}
+
 QCache<QString, QByteArray> *GoogleDriveObject::getCache() const
 {
     return this->cache;
@@ -230,6 +246,7 @@ void GoogleDriveObject::setCache(QCache<QString, QByteArray> *cache)
 void GoogleDriveObject::open()
 {
     this->temporaryFile = new QTemporaryFile(QDir::tempPath()+"/gofishtemp");
+
 }
 
 void GoogleDriveObject::clearChildren(QVector<GoogleDriveObject*> except)
@@ -314,6 +331,9 @@ void GoogleDriveObject::setupReadTimer()
 				    D("Truncating data from"<<myData.data.length()<<"to"<<myData.requestedLength);
                                     myData.data.resize(myData.requestedLength);
                                 }
+                                if (this->temporaryFile) {
+                                    this->saveRemoteDateToTempFile(myData);
+                                }
                                 emit readResponse(myData.data,key);
                             }
                         }
@@ -330,6 +350,18 @@ void GoogleDriveObject::setupReadTimer()
             this->readTimer.start();
         }
     });
+}
+
+void GoogleDriveObject::saveRemoteDateToTempFile(GoogleDriveObject::ReadData &readData)
+{
+    if (!this->temporaryFile) {
+        return;
+    }
+    if (this->temporaryFile->open(QIODevice::ReadWrite)) {
+        this->temporaryFile->seek(readData.start);
+        this->temporaryFile->write(readData.data);
+        this->temporaryFile->close();
+    }
 }
 
 void GoogleDriveObject::processRemoteFolder(QString path, QVector<GoogleDriveObject *> children)
