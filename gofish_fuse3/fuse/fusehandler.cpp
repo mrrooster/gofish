@@ -30,6 +30,7 @@ FuseHandler::FuseHandler(int argc, char *argv[],GoogleDrive *gofish, QObject *pa
     this->ops.getattr = FuseHandler::fuse_get_attr;
     this->ops.open    = FuseHandler::fuse_open;
     this->ops.read    = FuseHandler::fuse_read;
+    this->ops.create  = FuseHandler::fuse_create;
 
     this->gofish = gofish;
 
@@ -316,6 +317,23 @@ void FuseHandler::write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t 
 void FuseHandler::create(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode, fuse_file_info *fi)
 {
     D("In create");
+    GoogleDriveObject *parentItem = this->inodeToDir.value(parent);
+    if (!parentItem) {
+        fuse_reply_err(req,ENOENT);
+        return;
+    }
+    //GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache,QObject *parent=nullptr);
+    GoogleDriveObject *item = parentItem->create(name);
+    item->open();
+    addObjectForInode(item);
+    struct fuse_entry_param ent;
+    memset(&ent,0,sizeof(ent));
+    ent.ino = item->getInode();
+    ent.generation = 1;
+    setupStat(item,&ent.attr);
+    ent.attr_timeout=60;
+    ent.entry_timeout=60;
+    fuse_reply_create(req,&ent,fi);
 }
 
 void FuseHandler::fuse_init(void *userdata,struct fuse_conn_info *conn)

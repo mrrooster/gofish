@@ -1,5 +1,7 @@
 #include <QDebug>
 #include <QSettings>
+#include <QDir>
+#include <QTemporaryFile>
 
 #include "googledriveobject.h"
 #include "defaults.h"
@@ -24,6 +26,7 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QCache<QString, QByteA
 GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache, QObject *parent) :
     QObject(parent),
     populated(false),
+    temporaryFile(nullptr),
     openMode(QIODevice::NotOpen)
 {
     Q_ASSERT(READ_CHUNK_SIZE%CACHE_CHUNK_SIZE == 0);
@@ -39,7 +42,7 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString pa
     this->size     = size;
     this->ctime    = ctime;
     this->mtime    = mtime;
-    this->inode    = gofish->getInodeForFileId(this->id.isEmpty()?getPath():this->id);
+    this->inode    = gofish->getInodeForFileId(this->id.isEmpty()? (getPath()+"/"+getName()):this->id);
     this->childFolderCount = 0;
     this->usageCount = 0;
 
@@ -61,6 +64,9 @@ GoogleDriveObject::GoogleDriveObject(GoogleDrive *gofish, QString id, QString pa
 
 GoogleDriveObject::~GoogleDriveObject()
 {
+    if (this->temporaryFile!=nullptr) {
+        delete this->temporaryFile;
+    }
     clearChildren();
 }
 
@@ -174,6 +180,23 @@ void GoogleDriveObject::setChildren(QVector<GoogleDriveObject *> newChildren)
     this->populated = true;
 }
 
+GoogleDriveObject *GoogleDriveObject::create(QString name)
+{
+    GoogleDriveObject *newObj = new GoogleDriveObject(
+                this->gofish,
+                "",
+                this->path,
+                name.replace(QRegExp("[/]"),"_"),
+                "application/octet-stream",
+                0,
+                QDateTime::currentDateTime(),
+                QDateTime::currentDateTime(),
+                nullptr
+               );
+    this->contents.append(newObj);
+    return newObj;
+}
+
 qint64 GoogleDriveObject::read(qint64 start, qint64 totalLength)
 {
     quint64 token = this->requestToken++;
@@ -202,6 +225,11 @@ QCache<QString, QByteArray> *GoogleDriveObject::getCache() const
 void GoogleDriveObject::setCache(QCache<QString, QByteArray> *cache)
 {
     this->cache = cache;
+}
+
+void GoogleDriveObject::open()
+{
+    this->temporaryFile = new QTemporaryFile(QDir::tempPath()+"/gofishtemp");
 }
 
 void GoogleDriveObject::clearChildren(QVector<GoogleDriveObject*> except)
@@ -329,7 +357,8 @@ QDebug operator<<(QDebug debug, const GoogleDriveObject &o)
     QDebugStateSaver s(debug);
 
     debug.nospace()
-            << "[name: " << o.getName()
+            << "[Ino: " << o.getInode()
+            << ",   name: " << o.getName()
             << ", Mimetype: " << o.getMimeType()
             << ", Size: " << o.getSize()
             << ", is folder: " << (o.isFolder()?'Y':'N')

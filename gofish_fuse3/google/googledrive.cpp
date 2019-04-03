@@ -103,7 +103,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     if (!nextPageToken.isEmpty()) {
         query += QString("&pageToken=%1").arg(QString(QUrl::toPercentEncoding(nextPageToken," '")).replace(" ","+"));
     }
-    query += "&fields=files(name,size,mimeType,id,kind,createdTime,modifiedTime)";
+    query += "&fields=nextPageToken,files(name,size,mimeType,id,kind,createdTime,modifiedTime)&pageSize=1000";
     url.setQuery(query);
     queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QByteArray responseData,bool found){
         //D("Read file response data:"<<responseData);
@@ -111,8 +111,9 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
             D("Error'd/empty response.");
             return;
         }
+        D("Got response data:"+responseData);
         QJsonDocument doc = QJsonDocument::fromJson(responseData);
-        //D("Got response:"<<doc);
+        D("Got response:"<<doc);
 
         if (doc.isObject()) {
             if (doc["files"].isArray()) {

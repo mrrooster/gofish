@@ -4,10 +4,11 @@
 #include <QObject>
 #include <QDateTime>
 #include <QCache>
+#include <QFile>
 #include "googledrive.h"
 #include "defaults.h"
 
-class GoogleDriveObject : public QObject
+class   GoogleDriveObject : public QObject
 {
     Q_OBJECT
 public:
@@ -32,10 +33,12 @@ public:
     QDateTime getModifiedTime();
     quint64 getChildren();
     void setChildren(QVector<GoogleDriveObject*> newChildren);
+    GoogleDriveObject *create(QString name);
     qint64 read(qint64 start, qint64 totalLength);
     QCache<QString,QByteArray> *getCache() const;
     quint32 getRefreshSecs();
     void setCache(QCache<QString,QByteArray> *cache);
+    void open();
 
 //    void operator =(const GoogleDriveObject &other);
 signals:
@@ -63,7 +66,7 @@ private:
     QDateTime mtime;
     qint64 updated;
     quint64 inode;
-    QString temporaryFile; // If not empty, file is disc backed
+    QFile *temporaryFile; // If not empty, file is disc backed
     QIODevice::OpenMode openMode; // Only used for open for write
     qint64 pos;
 
