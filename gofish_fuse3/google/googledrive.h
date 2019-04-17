@@ -8,6 +8,7 @@
 #include <QVector>
 #include <QJsonValue>
 #include <QJsonDocument>
+class QNetworkReply;
 class GoogleDriveObject;
 
 class GoogleDrive : public QObject
@@ -20,28 +21,31 @@ public:
     ~GoogleDrive();
 
     bool pathInFlight(QString path);
-    QByteArray getPendingSegment(QString fileId, quint64 start, quint64 length);
-    quint64 getInodeForFileId(QString id);
-    quint64 readRemoteFolder(QString path, QString parentId);
-    quint64 getFileContents(QString fileId, quint64 start, quint64 length);
+    QByteArray getPendingSegment(QString fileId, qint64 start, qint64 length);
+    qint64 getInodeForFileId(QString id);
+    void readRemoteFolder(QString path, QString parentId);
+    void getFileContents(QString fileId, qint64 start, qint64 length);
+    void uploadFile(QIODevice *file, QString path, QString fileId, QString parentId);
 
 signals:
     void stateChanged(ConnectionState newState);
     void remoteFolder(QString path, QVector<GoogleDriveObject*> children);
-    void pendingSegment(QString fileId, quint64 start, quint64 length);
+    void pendingSegment(QString fileId, qint64 start, qint64 length);
+    void uploadInProgress(QString path);
+    void uploadComplete(QString path,QString fileId);
 
 private:
-    quint64 inode;
-    quint64 requestToken;
+    qint64 inode;
     GOAuth2AuthorizationCodeFlow *auth;
     QTimer refreshTokenTimer;
     QTimer operationTimer;
     ConnectionState state;
     QMap<QString,QVector<QVariantMap>*> inflightValues;
     QMap<QString,QByteArray> pendingSegments;
-    QMap<QString,quint64> inodeMap;
+    QMap<QString,qint64> inodeMap;
     QVector<QString> inflightPaths;
     QVector<GoogleDriveOperation*> queuedOps;
+    QVector<QString> pregeneratedIds;
 
     QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;
 
@@ -52,9 +56,12 @@ private:
     void setState(ConnectionState newState);
     void readFolder(QString startPath, QString path,QString nextPageToken,QString currentFolderId);
     void readFolder(QString startPath, QString nextPageToken, QString parentId);
-    void readFileSection(QString fileId, quint64 start, quint64 length);
+    void readFileSection(QString fileId, qint64 start, qint64 length);
 
-    void queueOp(QPair<QUrl,QVariantMap> urlAndHeaders,std::function<void(QByteArray,bool)> handler);
+    void queueOp(QUrl url, QVariantMap headers, std::function<void(QNetworkReply *, bool)> handler);
+    void queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void(QNetworkReply *, bool)> handler);
+    void queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void(QNetworkReply *, bool)> handler, std::function<void(QNetworkReply *)> inProgressHandler);
+    void uploadFileContents(QIODevice *file, QString path, QString fileId, QString url);
 private slots:
     void operationTimerFired();
     void requestFinished(QNetworkReply *response);

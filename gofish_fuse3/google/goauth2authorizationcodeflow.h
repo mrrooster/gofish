@@ -9,6 +9,8 @@ public:
     GOAuth2AuthorizationCodeFlow(QNetworkAccessManager *manager, QObject *parent = nullptr);
 public:
     void resetStatus(QAbstractOAuth::Status status);
+
+    virtual QNetworkReply *patch(const QUrl &url, const QByteArray &data);
 };
 
 #endif // GOAUTH2AUTHORIZATIONCODEFLOW_H

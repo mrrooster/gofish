@@ -2,3 +2,8 @@
 *.autosave
 # Omit the client IDs from git
 clientid.h
+build-gofish-*
+*.core
+*.o
+moc_*.[ch]*
+*.pro.user.*

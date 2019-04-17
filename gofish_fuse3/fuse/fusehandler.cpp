@@ -29,7 +29,9 @@ FuseHandler::FuseHandler(int argc, char *argv[],GoogleDrive *gofish, QObject *pa
     this->ops.readdir = FuseHandler::fuse_read_dir;
     this->ops.getattr = FuseHandler::fuse_get_attr;
     this->ops.open    = FuseHandler::fuse_open;
+    this->ops.release = FuseHandler::fuse_release;
     this->ops.read    = FuseHandler::fuse_read;
+    this->ops.write   = FuseHandler::fuse_write;
     this->ops.create  = FuseHandler::fuse_create;
 
     this->gofish = gofish;
@@ -52,13 +54,13 @@ void FuseHandler::initRoot()
     if (this->cache == nullptr) {
         QSettings settings;
         settings.beginGroup("googledrive");
-        quint64 cacheSize = settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong()/1024;
+        qint64 cacheSize = settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong()/1024;
 
         if (cacheSize<(CACHE_CHUNK_SIZE/1024)) {
             cacheSize = (CACHE_CHUNK_SIZE/1024);
         }
         qInfo().noquote() << QString("Using in memory cache of %1MiB").arg(cacheSize/1024);
-        this->cache = new QCache<QString,QByteArray>(cacheSize);
+        this->cache = new QCache<QString,CacheEntry>(cacheSize);
     }
 
     if (this->root) {
@@ -66,6 +68,7 @@ void FuseHandler::initRoot()
     }
     this->inodeToDir.clear();
     this->root  = new GoogleDriveObject(
+                nullptr,
                 this->gofish,
                 this->cache
     );
@@ -108,7 +111,7 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
     this->inodeToDir.insert(obj->getInode(),obj);
     if (!this->connectedObjects.contains(obj)) {
         this->connectedObjects.append(obj);
-        connect(obj,&GoogleDriveObject::children,this,[=](QVector<GoogleDriveObject*> children,quint64 requestToken){
+        connect(obj,&GoogleDriveObject::children,this,[=](QVector<GoogleDriveObject*> children,qint64 requestToken){
             D("In children handler, token:"<<requestToken<<obj->getPath());
             if (this->inflightOpMap.contains(requestToken)) {
                 InflightOp op = this->inflightOpMap.take(requestToken);
@@ -129,7 +132,7 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                     }
                     char *dirBuff = new char[size];
                     memset(dirBuff,0,size);
-                    quint64 off=0;
+                    qint64 off=0;
                     stbuf.st_ino = obj->getInode();
                     // FIX ALL THIS
                     off += fuse_add_direntry(op.req,dirBuff+off,size-off,".",&stbuf,1);
@@ -170,7 +173,7 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
             }
             D("Leaving child handler");
         });
-        connect(obj,&GoogleDriveObject::readResponse,[=](QByteArray data,quint64 requestToken){
+        connect(obj,&GoogleDriveObject::readResponse,[=](QByteArray data,qint64 requestToken){
             D("Read resopnse, token:"<<requestToken);
             if (this->inflightOpMap.contains(requestToken)) {
                 D("Found inflight response.");
@@ -178,6 +181,34 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                 this->inflightOpList.removeOne(op);
                 D("Reply with data"<<data.size());
                 fuse_reply_buf(op.req,data.data(),data.size());
+            }
+        });
+        connect(obj,&GoogleDriveObject::writeResponse,[=](qint64 requestToken){
+            D("Write response, token:"<<requestToken);
+            if (this->inflightOpMap.contains(requestToken)) {
+                D("Found inflight response.");
+                InflightOp op = this->inflightOpMap.take(requestToken);
+                this->inflightOpList.removeOne(op);
+                fuse_reply_write(op.req,op.size);
+            }
+        });
+        connect(obj,&GoogleDriveObject::closeResponse,[=](qint64 requestToken){
+            D("Close response, token:"<<requestToken);
+            if (this->inflightOpMap.contains(requestToken)) {
+                D("Found inflight response.");
+                InflightOp op = this->inflightOpMap.take(requestToken);
+                this->inflightOpList.removeOne(op);
+                fuse_reply_err(op.req,0);
+            }
+        });
+        connect(obj,&GoogleDriveObject::closeInProgress,[=](qint64 requestToken){
+            D("Close in progress, token:"<<requestToken);
+            if (this->inflightOpMap.contains(requestToken)) {
+                D("Found inflight response; refreshing");
+                InflightOp op = this->inflightOpMap.take(requestToken);
+                this->inflightOpList.removeOne(op);
+                op.time = QDateTime::currentMSecsSinceEpoch();
+                addOp(op);
             }
         });
     }
@@ -276,18 +307,41 @@ void FuseHandler::open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
     GoogleDriveObject *item = this->inodeToDir.value(ino);
     bool write = (fi->flags & O_WRONLY) | (fi->flags & O_RDWR);
 
-    D("Open inode"<<ino<<write);
+    D("Open inode"<<ino<<", for write:"<<write);
     if (!item && !write) {
         fuse_reply_err(req, ENOENT);
         return;
     }
+    if (write) {
+        item->open();
+    }
     fuse_reply_open(req,fi);
+    /*
     qint64 off = item->getSize() - (CACHE_CHUNK_SIZE*3);
     if (off<0) {
         off=0;
-    }
+    }*/
     //item->read(off,item->getSize()-off);
     //item->read(0,(CACHE_CHUNK_SIZE*3));
+}
+
+void FuseHandler::release(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
+{
+    GoogleDriveObject *item = this->inodeToDir.value(ino);
+    if (!item) {
+        fuse_reply_err(req, ENOENT);
+        return;
+    }
+    D("Close inode"<<ino<<",name :"<<item->getName());
+    InflightOp op;
+    op.req = req;
+    op.time = QDateTime::currentMSecsSinceEpoch();
+    op.size = 0;
+    op.off = 0;
+    op.inode = ino;
+    op.token = item->close();
+    op.op = Release;
+    addOp(op);
 }
 
 void FuseHandler::read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, fuse_file_info *fi)
@@ -311,7 +365,21 @@ void FuseHandler::read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, f
 
 void FuseHandler::write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, fuse_file_info *fi)
 {
-    D("In write");
+    GoogleDriveObject *item = this->inodeToDir.value(ino);
+    if (!item) {
+        fuse_reply_err(req, ENOENT);
+        return;
+    }
+    D("Write inode"<<ino<<",size:"<<size<<",off:"<<off<<",name :"<<item->getName());
+    InflightOp op;
+    op.req = req;
+    op.time = QDateTime::currentMSecsSinceEpoch();
+    op.size = size;
+    op.off = off;
+    op.inode = ino;
+    op.token = item->write(QByteArray(buf,size),off);
+    op.op = Write;
+    addOp(op);
 }
 
 void FuseHandler::create(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode, fuse_file_info *fi)
@@ -322,7 +390,7 @@ void FuseHandler::create(fuse_req_t req, fuse_ino_t parent, const char *name, mo
         fuse_reply_err(req,ENOENT);
         return;
     }
-    //GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, quint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache,QObject *parent=nullptr);
+    //GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, qint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache,QObject *parent=nullptr);
     GoogleDriveObject *item = parentItem->create(name);
     item->open();
     addObjectForInode(item);
@@ -364,6 +432,11 @@ void FuseHandler::fuse_get_attr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *
 void FuseHandler::fuse_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
 {
     reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->open(req,ino,fi);
+}
+
+void FuseHandler::fuse_release(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
+{
+    reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->release(req,ino,fi);
 }
 
 void FuseHandler::fuse_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, fuse_file_info *fi)
@@ -443,10 +516,10 @@ QDebug operator<<(QDebug debug, const FuseHandler::InflightOp &o)
         fuse_ino_t inode;
         size_t size;
         off_t off;
-        quint64 token;
+        qint64 token;
         */
     debug.nospace()
-            << "[Op:" << (o.op == FuseHandler::ReadDir?"ReadDir": o.op==FuseHandler::Lookup ? "Lookup" : "Read")
+            << "[Op:" << (o.op == FuseHandler::ReadDir?"ReadDir": o.op==FuseHandler::Lookup ? "Lookup" : o.op==FuseHandler::Read ? "Read" : o.op==FuseHandler::Write ? "Write" : "Release")
             << ", Time: "<< o.time
             << ", Name: "<< o.name
             << ", Inode: "<< o.inode

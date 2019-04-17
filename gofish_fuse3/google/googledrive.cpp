@@ -22,6 +22,8 @@ const QUrl access_token_url("https://www.googleapis.com/oauth2/v4/token");
 
 const QUrl files_list("https://www.googleapis.com/drive/v3/files");
 const QUrl files_info("https://www.googleapis.com/drive/v3/files/");
+const QUrl files_upload("https://www.googleapis.com/upload/drive/v3/files");
+const QUrl files_get_ids("https://www.googleapis.com/drive/v3/files/generateIds");
 
 GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(Disconnected)
 {
@@ -42,13 +44,11 @@ GoogleDrive::~GoogleDrive()
 {
 }
 
-quint64 GoogleDrive::readRemoteFolder(QString path, QString parentId)
+void GoogleDrive::readRemoteFolder(QString path, QString parentId)
 {
     D("read remote folder."<<path);
-    quint64 token = this->requestToken++;
     if (this->inflightPaths.contains(path)) {
         D("Another request in progress.");
-        return token;
     }
     if (this->inflightValues.contains(path)) {
         this->inflightValues.value(path)->clear();
@@ -57,7 +57,6 @@ quint64 GoogleDrive::readRemoteFolder(QString path, QString parentId)
     }
     this->inflightPaths.append(path);
     readFolder(path,"",parentId);
-    return token;
 }
 
 bool GoogleDrive::pathInFlight(QString path)
@@ -65,7 +64,7 @@ bool GoogleDrive::pathInFlight(QString path)
     return this->inflightPaths.contains(path);
 }
 
-QByteArray GoogleDrive::getPendingSegment(QString fileId, quint64 start, quint64 length)
+QByteArray GoogleDrive::getPendingSegment(QString fileId, qint64 start, qint64 length)
 {
     QString id = QString("%1:%2:%3").arg(fileId).arg(start).arg(length);
     if (this->pendingSegments.contains(id)) {
@@ -74,18 +73,107 @@ QByteArray GoogleDrive::getPendingSegment(QString fileId, quint64 start, quint64
     return QByteArray();
 }
 
-quint64 GoogleDrive::getFileContents(QString fileId, quint64 start, quint64 length)
+void GoogleDrive::getFileContents(QString fileId, qint64 start, qint64 length)
 {
     QString id = QString("%1:%2:%3").arg(fileId).arg(start).arg(length);
-    quint64 token = this->requestToken++;
-    D("read remote file."<<id<<", token:"<<token);
+    D("read remote file."<<id);
 
 
     this->inflightPaths.append(id);
     D("read remote file.. locked."<<id);
     //readFolder(path,path,"","");
     readFileSection(fileId,start,length);
-    return token;
+}
+
+void GoogleDrive::uploadFile(QIODevice *file, QString path, QString fileId, QString parentId)
+{
+    QUrl url = files_upload;
+    GoogleDriveOperation::HttpOperation op = GoogleDriveOperation::Post;
+    if (fileId!="") {
+        op = GoogleDriveOperation::Patch;
+        url.setPath(url.path()+"/"+fileId);
+    } else {
+        if (this->pregeneratedIds.isEmpty()) {
+            url = files_get_ids;
+            url.setQuery("count=1&space=drive");
+            queueOp(url,QVariantMap(),[=](QNetworkReply *response,bool){
+                if(response->error()==QNetworkReply::NoError) {
+                    QJsonDocument doc = QJsonDocument::fromJson(response->readAll());
+                    if (doc["ids"].isArray()) {
+                        auto ids = doc["ids"].toArray();
+                        for(int idx=0;idx<ids.size();idx++) {
+                            this->pregeneratedIds.append(ids[idx].toString());
+                        }
+                        this->uploadFile(file,path,fileId,parentId);
+                    }
+                }
+            });
+            return;
+        } else {
+            fileId = this->pregeneratedIds.takeFirst();
+        }
+    }
+    url.setQuery("uploadType=resumable");
+    D("Upload URL:"<<url);
+
+    QJsonObject obj;
+    QString fileName = path.mid(path.lastIndexOf("/")+1);
+    obj.insert("name",QJsonValue(fileName));
+    obj.insert("id",fileId);
+    obj.insert("publishAuto",true);
+    obj.insert("parents",QJsonArray({parentId}));
+    QJsonDocument doc(obj);
+    QByteArray bodyContent = doc.toJson();
+    QVariantMap headers;
+    headers.insert("Content-Type","application/json; charset=UTF-8");
+    headers.insert("X-Upload-Content-Length",file->size());
+    headers.insert("Content-Length",bodyContent.size());
+    D("Metadata for upload:"+bodyContent);
+
+    queueOp(url,headers,doc.toJson(),op,[=](QNetworkReply *response,bool found){
+        //if (responseData.isEmpty()) {
+        //    D("Error'd/empty response from upload.");
+        //    return;
+        //}
+        if (response->error()==QNetworkReply::NoError) {
+            QString redirect = response->header(QNetworkRequest::LocationHeader).toString();
+            QUrl redirectUrl(redirect);
+            redirectUrl.setPath("/upload/drive/v3/files");
+            redirect = redirectUrl.toString();
+            QString body = response->readAll();
+            D("Redirect URL: "<<redirect);
+            D("Body        : "<<body);
+            emit this->uploadInProgress(path);
+            file->open(QIODevice::ReadOnly);
+            this->uploadFileContents(file,path,fileId,redirect);
+        } else {
+            D("Error uploading:"+response->errorString());
+        }
+    });
+}
+
+void GoogleDrive::uploadFileContents(QIODevice *file, QString path, QString fileId,QString url)
+{
+    QVariantMap headers;
+    qint64 pos = file->pos();
+    QByteArray data = file->read(UPLOAD_CHUNK_SIZE);
+
+    headers.insert("X-Upload-Content-Length",file->size());
+    headers.insert("Content-Type","application/octet-stream;");
+    headers.insert("Content-Length",data.size());
+    headers.insert("Content-Range",QString("bytes %1-%2/%3").arg(pos).arg(file->pos()-1).arg(file->size()));
+    GoogleDriveOperation::HttpOperation op = GoogleDriveOperation::Put;
+
+    queueOp(url,headers,data,op,[=](QNetworkReply*,bool){
+        if (file->atEnd()) {
+            file->close();
+            emit this->uploadComplete(path,fileId);
+        } else {
+            this->uploadFileContents(file,path,fileId,url);
+        }
+    },[=](QNetworkReply*){emit this->uploadInProgress(path);});
+
+    emit this->uploadInProgress(path);
 }
 
 void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId)
@@ -98,32 +186,46 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     if (startPath=="/") {
         queryString = "('root' in parents or sharedWithMe = true)";
     }
+    queryString += " and not trashed";
 
     QString query = QString("q=%1").arg(QString(QUrl::toPercentEncoding(queryString," '")).replace(" ","+"));
     if (!nextPageToken.isEmpty()) {
         query += QString("&pageToken=%1").arg(QString(QUrl::toPercentEncoding(nextPageToken," '")).replace(" ","+"));
     }
-    query += "&fields=nextPageToken,files(name,size,mimeType,id,kind,createdTime,modifiedTime)&pageSize=1000";
+    query += "&fields=*";//nextPageToken,files(name,size,mimeType,id,kind,createdTime,modifiedTime)&pageSize=1000";
     url.setQuery(query);
-    queueOp(QPair<QUrl,QVariantMap>(url,QVariantMap()),[=](QByteArray responseData,bool found){
+    queueOp(url,QVariantMap(),[=](QNetworkReply *response,bool found){
+        QByteArray responseData = response->readAll();
         //D("Read file response data:"<<responseData);
         if (responseData.isEmpty()||!found) {
             D("Error'd/empty response.");
             return;
         }
-        D("Got response data:"+responseData);
+//        D("Got response data:"+responseData);
         QJsonDocument doc = QJsonDocument::fromJson(responseData);
         D("Got response:"<<doc);
 
         if (doc.isObject()) {
             if (doc["files"].isArray()) {
+                QVector<QString> nameList;
+
+                for(auto it = this->inflightValues.value(startPath)->begin(),end = this->inflightValues.value(startPath)->end(); it!=end; it++) {
+                    QVariantMap file = (*it);
+                    nameList.append(file["name"].toString());
+                }
                 auto files = doc["files"].toArray();
 
                 for(int idx=0;idx<files.size();idx++) {
                     const QJsonValue file = files[idx];
                     QVariantMap fileInfo;
+                    QString localName = file["name"].toVariant().toString();
+                    while(nameList.contains(localName)) {
+                        localName += ".1";
+                    }
+                    nameList.append(localName);
+
                     fileInfo.insert("id",file["id"].toVariant());
-                    fileInfo.insert("name",file["name"].toVariant());
+                    fileInfo.insert("name",localName);
                     fileInfo.insert("mimeType",file["mimeType"].toVariant());
                     fileInfo.insert("size",file["size"].toVariant());
                     fileInfo.insert("createdTime",file["createdTime"].toVariant());
@@ -138,7 +240,8 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
         //                D("File: "<<file);
 
                         GoogleDriveObject *newObj = new GoogleDriveObject(
-                                    this,                                    
+                                    nullptr,
+                                    this,
                                     file["id"].toString(),
                                     startPath,
                                     sanitizeFilename(file["name"].toString()),
@@ -163,7 +266,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
         }
     });
 }
-void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
+void GoogleDrive::readFileSection(QString fileId, qint64 start, qint64 length)
 {
     QString id = QString("%1:%2:%3").arg(fileId).arg(start).arg(length);
     QUrl url = files_info.toString()+fileId;
@@ -176,7 +279,8 @@ void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
 
     extraHeaders.insert("Range",QString("bytes=%1-%2").arg(start).arg(start+length-1));
 
-    queueOp(QPair<QUrl,QVariantMap>(url,extraHeaders),[=](QByteArray responseData,bool found){
+    queueOp(url,extraHeaders,[=](QNetworkReply *response,bool found){
+        QByteArray responseData = response->readAll();
         this->pendingSegments.insert(id,responseData);
         D("Got file section response, size:"<<responseData.size());
         this->inflightPaths.removeOne(id);
@@ -184,14 +288,27 @@ void GoogleDrive::readFileSection(QString fileId, quint64 start, quint64 length)
     });
 }
 
-void GoogleDrive::queueOp(QPair<QUrl, QVariantMap> urlAndHeaders, std::function<void(QByteArray,bool)> handler)
+void GoogleDrive::queueOp(QUrl url, QVariantMap headers, std::function<void(QNetworkReply*,bool)> handler)
+{
+    queueOp(url,headers,QByteArray(),GoogleDriveOperation::Get,handler);
+}
+
+void GoogleDrive::queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void (QNetworkReply *, bool)> handler)
+{
+    queueOp(url,headers,data,op,handler,[=](QNetworkReply*){});
+}
+
+void GoogleDrive::queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void (QNetworkReply*, bool)> handler, std::function<void(QNetworkReply *)> inProgressHandler)
 {
     GoogleDriveOperation *operation = new GoogleDriveOperation();
 
-    operation->url        = urlAndHeaders.first;
-    operation->headers    = urlAndHeaders.second;
+    operation->url        = url;
+    operation->headers    = headers;
     operation->handler    = handler;
+    operation->inProgressHandler = inProgressHandler;
+    operation->dataToSend = data;
     operation->retryCount = 0;
+    operation->httpOp     = op;
     this->queuedOps.append(operation);
     if (!this->operationTimer.isActive()) {
         this->operationTimer.start(REQUEST_TIMER_TICK_MSEC);
@@ -214,8 +331,23 @@ void GoogleDrive::operationTimerFired()
                 if (!op->headers.isEmpty()) {
                     dynamic_cast<GoogleNetworkAccessManager*>(this->auth->networkAccessManager())->setNextHeaders(op->headers);
                 }
-                auto response = this->auth->get(op->url);
+                QNetworkReply *response = nullptr;
+                if (op->httpOp==GoogleDriveOperation::Put) {
+                    D("Doing put");
+                    response = this->auth->put(op->url,op->dataToSend);
+                } else if (op->httpOp==GoogleDriveOperation::Post) {
+                    D("Doing post");
+                    response = this->auth->post(op->url,op->dataToSend);
+                } else if (op->httpOp==GoogleDriveOperation::Patch) {
+                    D("Doing patch");
+                    response = this->auth->patch(op->url,op->dataToSend);
+                } else {
+                    response = this->auth->get(op->url);
+                }
                 D("Got response: "<<response);
+                connect(response,&QNetworkReply::uploadProgress,response,[=](qint64 , qint64 ){
+                    op->inProgressHandler(response);
+                });
                 this->inprogressOps.insert(response,op);
             }
         } else if (this->state==Disconnected) {
@@ -230,15 +362,14 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
 //    D("REQUEST FIN:"<<response<<response->isFinished());
     if (this->inprogressOps.contains(response)) {
         auto op = this->inprogressOps.take(response);
-        QByteArray responseData = response->readAll();
-        D("Got response size:"<<responseData.size());
-        if (response->error()==QNetworkReply::NoError && !responseData.isEmpty()) {
-            op->handler(responseData,true);
+
+        if (response->error()==QNetworkReply::NoError) {
+            op->handler(response,true);
             delete op;
         } else {
             if (response->error()==QNetworkReply::ContentNotFoundError) {
                 D("Not found.");
-                op->handler(QByteArray(),false);
+                op->handler(response,false);
                 delete op;
                 this->operationTimer.start();
                 return;
@@ -253,7 +384,7 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
             op->retryCount++;
             if (op->retryCount>10) {
                 D("Abandoning request due to >10 retries.");
-                op->handler(QByteArray(),false); // Call the response with no data to prevent locks
+                op->handler(response,false); // Call the response with no data to prevent locks
                 delete op;
             } else {
                 this->queuedOps.append(op);
@@ -264,7 +395,7 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
     }
 }
 
-quint64 GoogleDrive::getInodeForFileId(QString id)
+qint64 GoogleDrive::getInodeForFileId(QString id)
 {
     if (!this->inodeMap.contains(id)) {
         this->inodeMap.insert(id,this->inode++);
@@ -303,7 +434,12 @@ void GoogleDrive::authenticate()
     this->auth->setAccessTokenUrl(access_token_url);
     this->auth->setClientIdentifier(clientId);
     this->auth->setClientIdentifierSharedKey(clientSecret);
-    this->auth->setScope("https://www.googleapis.com/auth/drive.readonly");
+//    this->auth->setScope("https://www.googleapis.com/auth/drive.readonly");
+    this->auth->setScope("https://www.googleapis.com/auth/drive");
+
+    D("Callback     :"<<handler->callback());
+    D("Callback path:"<<handler->callbackPath());
+    D("Callbck text :"<<handler->callbackText());
 
     // Connect the finished signal
     connect(this->auth->networkAccessManager(),&QNetworkAccessManager::finished,this,&GoogleDrive::requestFinished);
@@ -337,7 +473,7 @@ void GoogleDrive::authenticate()
         if (status==QAbstractOAuth::Status::Granted) {
            D( "Authorised. Starting token refresh timer.");
 
-           quint64 msecs = 300000;
+           qint64 msecs = 300000;
 
            D("Setting token refresh timer for"<<msecs<<"ms.");
 

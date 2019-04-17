@@ -27,7 +27,7 @@ FuseThread::FuseThread(int argc, char *argv[],GoogleDrive *gofish, QObject *pare
 
     QSettings settings;
     settings.beginGroup("googledrive");
-    quint64 refreshSecs = settings.value("refresh_seconds",DEFAULT_REFRESH_SECS).toUInt();
+    qint64 refreshSecs = settings.value("refresh_seconds",DEFAULT_REFRESH_SECS).toUInt();
 
     connect(&this->refreshTimer,&QTimer::timeout,this,&FuseThread::setupRoot);
     this->refreshTimer.setSingleShot(false);
@@ -118,11 +118,11 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
 
     GoogleDriveObject *item = getObjectForPath(path);
 
-    quint64 blockSize = item->getBlockSize();
-    quint64 start = offset;
-    quint64 readCount = 0;
+    qint64 blockSize = item->getBlockSize();
+    qint64 start = offset;
+    qint64 readCount = 0;
     char *ptr=buf;
-    quint64 chunkStart = (start/blockSize) * blockSize;
+    qint64 chunkStart = (start/blockSize) * blockSize;
 
     if (start>=item->getSize()) {
         return -ENODATA;
@@ -152,7 +152,7 @@ int FuseThread::read(const char *path, char *buf, size_t size, off_t offset, str
             if (data.size()<copySize) {
                 copySize = data.size();
             }
-            quint64 chunkAvailable = blockSize - (start-chunkStart);
+            qint64 chunkAvailable = blockSize - (start-chunkStart);
             if (size > chunkAvailable) {
                 copySize = chunkAvailable;
             }
@@ -256,7 +256,7 @@ void FuseThread::setupRoot()
     if (this->cache == nullptr) {
         QSettings settings;
         settings.beginGroup("googledrive");
-        quint64 cacheSize = settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong()/1024;
+        qint64 cacheSize = settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toULongLong()/1024;
 
         if (cacheSize<(CACHE_CHUNK_SIZE/1024)) {
             cacheSize = (CACHE_CHUNK_SIZE/1024);
