@@ -21,7 +21,7 @@ class FuseHandler : public QObject
     Q_OBJECT
 public:
     explicit FuseHandler(int argc, char *argv[], GoogleDrive *gofish, QObject *parent = nullptr);
-    enum Operation { ReadDir,Lookup,Read,Write,Release };
+    enum Operation { ReadDir,Lookup,Read,Write,Release,MkDir,Unlink,Rename};
     struct InflightOp {
         Operation op;
         qint64 time;
@@ -61,22 +61,32 @@ private:
     void lookup(fuse_req_t req, fuse_ino_t parent, const char *name);
     void readDir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
     void getAttr(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
+    void setAttr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *fi);
     void open(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     void release(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     void read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
     void write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *fi);
     void create(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode, struct fuse_file_info *fi);
+    void mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode);
+    void unlink(fuse_req_t req, fuse_ino_t parent, const char *name);
+    void rmdir(fuse_req_t req, fuse_ino_t parent, const char *name);
+    void rename(fuse_req_t req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname, unsigned int flags);
     // fuse callbacks
     static void fuse_init(void *userdata, struct fuse_conn_info *conn);
     static void fuse_destroy(void *userdata);
     static void fuse_lookup(fuse_req_t req, fuse_ino_t parent, const char *name);
     static void fuse_read_dir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
     static void fuse_get_attr(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
+    static void fuse_set_attr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *fi);
     static void fuse_open(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     static void fuse_release(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     static void fuse_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
     static void fuse_write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *fi);
     static void fuse_create(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode, struct fuse_file_info *fi);
+    static void fuse_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode);
+    static void fuse_unlink(fuse_req_t req, fuse_ino_t parent, const char *name);
+    static void fuse_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name);
+    static void fuse_rename(fuse_req_t req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname, unsigned int flags);
 private slots:
     void eventTick();
     void timeOutTick();

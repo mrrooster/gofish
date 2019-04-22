@@ -22,3 +22,14 @@ QNetworkReply *GOAuth2AuthorizationCodeFlow::patch(const QUrl &url, const QByteA
     connect(reply, &QNetworkReply::finished, std::bind(&QAbstractOAuth::finished, this, reply));
     return reply;
 }
+
+QNetworkReply *GOAuth2AuthorizationCodeFlow::patch(const QUrl &url, QHttpMultiPart *data)
+{
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader, userAgent());
+    QString auth = QString("Bearer %1").arg(token());
+    request.setRawHeader("Authorization", auth.toUtf8());
+    QNetworkReply *reply = this->networkAccessManager()->sendCustomRequest(request,"PATCH", data);
+    connect(reply, &QNetworkReply::finished, std::bind(&QAbstractOAuth::finished, this, reply));
+    return reply;
+}

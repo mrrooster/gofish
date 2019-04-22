@@ -11,6 +11,8 @@
 class QNetworkReply;
 class GoogleDriveObject;
 
+#define GOOGLE_FOLDER "application/vnd.google-apps.folder"
+
 class GoogleDrive : public QObject
 {
     Q_OBJECT
@@ -26,6 +28,10 @@ public:
     void readRemoteFolder(QString path, QString parentId);
     void getFileContents(QString fileId, qint64 start, qint64 length);
     void uploadFile(QIODevice *file, QString path, QString fileId, QString parentId);
+    void createFolder(QString path,QString fileId,QString parentId);
+    void unlink(QString path,QString fileId);
+    void rename(QString fileId,QString oldParentId,QString newParentId,QString newName);
+    void updateMetadata(GoogleDriveObject *obj);
 
 signals:
     void stateChanged(ConnectionState newState);
@@ -33,6 +39,9 @@ signals:
     void pendingSegment(QString fileId, qint64 start, qint64 length);
     void uploadInProgress(QString path);
     void uploadComplete(QString path,QString fileId);
+    void dirCreated(QString path,QString fileId);
+    void unlinkComplete(QString path,bool sucess);
+    void renameComplete(QString fileId, bool sucess);
 
 private:
     qint64 inode;
@@ -57,6 +66,8 @@ private:
     void readFolder(QString startPath, QString path,QString nextPageToken,QString currentFolderId);
     void readFolder(QString startPath, QString nextPageToken, QString parentId);
     void readFileSection(QString fileId, qint64 start, qint64 length);
+
+    void updateFileMetadata(QString fileId,QJsonDocument doc,std::function<void(QNetworkReply *,bool)> handler, QString oldParent="",QString newParent="");
 
     void queueOp(QUrl url, QVariantMap headers, std::function<void(QNetworkReply *, bool)> handler);
     void queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void(QNetworkReply *, bool)> handler);

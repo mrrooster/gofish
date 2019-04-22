@@ -28,11 +28,16 @@ FuseHandler::FuseHandler(int argc, char *argv[],GoogleDrive *gofish, QObject *pa
     this->ops.lookup  = FuseHandler::fuse_lookup;
     this->ops.readdir = FuseHandler::fuse_read_dir;
     this->ops.getattr = FuseHandler::fuse_get_attr;
+    this->ops.setattr = FuseHandler::fuse_set_attr;
     this->ops.open    = FuseHandler::fuse_open;
     this->ops.release = FuseHandler::fuse_release;
     this->ops.read    = FuseHandler::fuse_read;
     this->ops.write   = FuseHandler::fuse_write;
     this->ops.create  = FuseHandler::fuse_create;
+    this->ops.mkdir   = FuseHandler::fuse_mkdir;
+    this->ops.unlink  = FuseHandler::fuse_unlink;
+    this->ops.rmdir   = FuseHandler::fuse_rmdir;
+    this->ops.rename  = FuseHandler::fuse_rename;
 
     this->gofish = gofish;
 
@@ -211,6 +216,52 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                 addOp(op);
             }
         });
+        connect(obj,&GoogleDriveObject::createDirResponse,[=](qint64 requestToken,GoogleDriveObject *dir){
+            D("Dir created, token:"<<requestToken);
+            if (this->inflightOpMap.contains(requestToken)) {
+                D("Found inflight response");
+                InflightOp op = this->inflightOpMap.take(requestToken);
+                this->inflightOpList.removeOne(op);
+                addObjectForInode(dir);
+                struct fuse_entry_param ent;
+                memset(&ent,0,sizeof(ent));
+                ent.ino = dir->getInode();
+                ent.generation = 1;
+                setupStat(dir,&ent.attr);
+                ent.attr_timeout=60;
+                ent.entry_timeout=60;
+                fuse_reply_entry(op.req,&ent);
+            }
+        });
+        connect(obj,&GoogleDriveObject::unlinkResponse,[=](qint64 requestToken,bool found) {
+            D("File unlinked, token:"<<requestToken);
+            if(this->inflightOpMap.contains(requestToken)) {
+                D("Found inflight response");
+                InflightOp op = this->inflightOpMap.take(requestToken);
+                this->inflightOpList.removeOne(op);
+                if(!found) {
+                    fuse_reply_err(op.req, ENOENT);
+                } else {
+                    fuse_reply_err(op.req, 0);
+                }
+                this->connectedObjects.removeOne(obj);
+            }
+        });
+        connect(obj,&GoogleDriveObject::renameResponse,[=](qint64 requestToken,bool found) {
+            D("File renamed, token:"<<requestToken);
+            if(this->inflightOpMap.contains(requestToken)) {
+                D("Found inflight response");
+                InflightOp op = this->inflightOpMap.take(requestToken);
+                this->inflightOpList.removeOne(op);
+                if(!found) {
+                    fuse_reply_err(op.req, EINVAL);
+                } else {
+                    fuse_reply_err(op.req, 0);
+                }
+                this->connectedObjects.removeOne(obj);
+            }
+        });
+
     }
 }
 
@@ -225,7 +276,7 @@ void FuseHandler::setupStat(GoogleDriveObject *item, struct stat *stbuf)
 {
     ::memset(stbuf,0,sizeof(struct stat));
 
-    stbuf->st_mode= 0555;
+    stbuf->st_mode= item->getFileMode();
     if (item->isFolder()) {
 //        D("Entry is directory:"<<item->getName()<<", children:"<<item->getChildFolderCount());
         stbuf->st_mode |= S_IFDIR;
@@ -241,8 +292,8 @@ void FuseHandler::setupStat(GoogleDriveObject *item, struct stat *stbuf)
     stbuf->st_ctime= item->getCreatedTime().toTime_t();
     stbuf->st_mtime= item->getCreatedTime().toTime_t();
     stbuf->st_ino  = item->getInode();
-    stbuf->st_uid = ::getuid();
-    stbuf->st_gid = ::getgid();
+    stbuf->st_uid = item->getUid();
+    stbuf->st_gid = item->getGid();
 //    D("setupStat:"<<*stbuf);
 }
 
@@ -302,6 +353,40 @@ void FuseHandler::getAttr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
     D("Leaving getattr:"<<ino);
 }
 
+void FuseHandler::setAttr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set, fuse_file_info *fi)
+{
+    D("setAttr, Inode:"<<ino);
+
+    GoogleDriveObject *item = this->inodeToDir.value(ino);
+    if (!item) {
+        D("Returning ENOENT, for inode:"<<ino);
+        fuse_reply_err(req, ENOENT);
+        return;
+    }
+
+    if  (to_set&FUSE_SET_ATTR_MODE) {
+        D("Changing file permissions.");
+        item->setFileMode(attr->st_mode);
+    }
+    if (to_set&FUSE_SET_ATTR_UID) {
+        D("Changing file owner");
+        item->setUid(attr->st_uid);
+    }
+    if (to_set&FUSE_SET_ATTR_GID) {
+        D("Changing file group");
+        item->setGid(attr->st_gid);
+    }
+    if (to_set&FUSE_SET_ATTR_ATIME) {
+        D("Set atime TODO");
+    }
+    if (to_set&FUSE_SET_ATTR_MTIME) {
+        D("Set mtime");
+        item->setModifiedTime(attr->st_mtime);
+    }
+    getAttr(req,ino,fi);
+    D("Leaving setattr:"<<ino);
+}
+
 void FuseHandler::open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
 {
     GoogleDriveObject *item = this->inodeToDir.value(ino);
@@ -312,9 +397,7 @@ void FuseHandler::open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
         fuse_reply_err(req, ENOENT);
         return;
     }
-    if (write) {
-        item->open();
-    }
+    item->open(write);
     fuse_reply_open(req,fi);
     /*
     qint64 off = item->getSize() - (CACHE_CHUNK_SIZE*3);
@@ -392,7 +475,7 @@ void FuseHandler::create(fuse_req_t req, fuse_ino_t parent, const char *name, mo
     }
     //GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, qint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache,QObject *parent=nullptr);
     GoogleDriveObject *item = parentItem->create(name);
-    item->open();
+    item->open(true);
     addObjectForInode(item);
     struct fuse_entry_param ent;
     memset(&ent,0,sizeof(ent));
@@ -402,6 +485,90 @@ void FuseHandler::create(fuse_req_t req, fuse_ino_t parent, const char *name, mo
     ent.attr_timeout=60;
     ent.entry_timeout=60;
     fuse_reply_create(req,&ent,fi);
+}
+
+void FuseHandler::mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
+{
+    D("In mkdir");
+    GoogleDriveObject *parentItem = this->inodeToDir.value(parent);
+    if (!parentItem) {
+        fuse_reply_err(req,ENOENT);
+        return;
+    }
+    InflightOp op;
+    op.req = req;
+    op.time = QDateTime::currentMSecsSinceEpoch();
+    op.size = 0;
+    op.off = 0;
+    op.inode = parent;
+    op.token = parentItem->createDir(name);
+    op.op = MkDir;
+    addOp(op);
+}
+
+void FuseHandler::unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+    D("In unlink");
+    GoogleDriveObject *item = this->inodeToDir.value(parent);
+    if (!item) {
+        fuse_reply_err(req, ENOENT);
+        return;
+    };
+    InflightOp op;
+    op.req = req;
+    op.time = QDateTime::currentMSecsSinceEpoch();
+    op.size = 0;
+    op.off = 0;
+    op.inode = parent;
+    op.token = item->unlinkChild(name);
+    op.op = Unlink;
+    addOp(op);
+}
+
+void FuseHandler::rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+    D("In rmdir");
+    GoogleDriveObject *item = this->inodeToDir.value(parent);
+    if (!item) {
+        fuse_reply_err(req, ENOENT);
+        return;
+    };
+    if (!item->isFolder()) {
+        fuse_reply_err(req,ENOTDIR);
+        return;
+    }
+    InflightOp op;
+    op.req = req;
+    op.time = QDateTime::currentMSecsSinceEpoch();
+    op.size = 0;
+    op.off = 0;
+    op.inode = parent;
+    op.token = item->unlinkChild(name);
+    op.op = Unlink;
+    addOp(op);
+}
+
+void FuseHandler::rename(fuse_req_t req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname, unsigned int flags)
+{
+    D("In fuse_rename");
+    GoogleDriveObject *oldParent = this->inodeToDir.value(parent);
+    GoogleDriveObject *item;
+    GoogleDriveObject *newParent = this->inodeToDir.value(newparent);
+
+    if (!oldParent || !newParent) {
+        fuse_reply_err(req, ENOENT);
+        return;
+    }
+
+    InflightOp op;
+    op.req = req;
+    op.time = QDateTime::currentMSecsSinceEpoch();
+    op.size = 0;
+    op.off = 0;
+    op.inode = parent;
+    op.token = newParent->takeItem(oldParent,name,newname);
+    op.op = Rename;
+    addOp(op);
 }
 
 void FuseHandler::fuse_init(void *userdata,struct fuse_conn_info *conn)
@@ -429,6 +596,11 @@ void FuseHandler::fuse_get_attr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *
     reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->getAttr(req,ino,fi);
 }
 
+void FuseHandler::fuse_set_attr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set, fuse_file_info *fi)
+{
+    reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->setAttr(req,ino, attr, to_set,fi);
+}
+
 void FuseHandler::fuse_open(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
 {
     reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->open(req,ino,fi);
@@ -454,6 +626,26 @@ void FuseHandler::fuse_create(fuse_req_t req, fuse_ino_t parent, const char *nam
     reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->create(req,parent,name,mode,fi);
 }
 
+void FuseHandler::fuse_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
+{
+    reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->mkdir(req,parent,name,mode);
+}
+
+void FuseHandler::fuse_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+    reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->unlink(req,parent,name);
+}
+
+void FuseHandler::fuse_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+    reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->rmdir(req,parent,name);
+}
+
+void FuseHandler::fuse_rename(fuse_req_t req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname, unsigned int flags)
+{
+    reinterpret_cast<FuseHandler*>(fuse_req_userdata(req))->rename(req,parent,name,newparent,newname,flags);
+}
+
 void FuseHandler::eventTick()
 {
     int fd = fuse_session_fd(this->session);
@@ -468,7 +660,7 @@ void FuseHandler::eventTick()
 
         memset(&buff,0,sizeof(buff));
 
-        int ret = fuse_session_receive_buf(this->session,&buff);
+        fuse_session_receive_buf(this->session,&buff);
         fuse_session_process_buf(this->session,&buff);
         ::free(buff.mem);
         this->pollDelay=0;
@@ -519,7 +711,17 @@ QDebug operator<<(QDebug debug, const FuseHandler::InflightOp &o)
         qint64 token;
         */
     debug.nospace()
-            << "[Op:" << (o.op == FuseHandler::ReadDir?"ReadDir": o.op==FuseHandler::Lookup ? "Lookup" : o.op==FuseHandler::Read ? "Read" : o.op==FuseHandler::Write ? "Write" : "Release")
+            << "[Op:" << (
+                   o.op == FuseHandler::ReadDir? "ReadDir":
+                   o.op==FuseHandler::Lookup   ? "Lookup" :
+                   o.op==FuseHandler::Read     ? "Read" :
+                   o.op==FuseHandler::Write    ? "Write" :
+                   o.op==FuseHandler::Release  ? "Release" :
+                   o.op==FuseHandler::MkDir    ? "Mkdir" :
+                   o.op==FuseHandler::Unlink   ? "Unlink" :
+                   o.op==FuseHandler::Rename   ? "Rename" :
+                   "Eh??"
+                   )
             << ", Time: "<< o.time
             << ", Name: "<< o.name
             << ", Inode: "<< o.inode

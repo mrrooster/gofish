@@ -18,6 +18,7 @@ public:
     QByteArray dataToSend;
     int retryCount;
     HttpOperation httpOp;
+    QHttpMultiPart *mimeData;
 };
 
 #endif // GOOGLEDRIVEOPERATION_H

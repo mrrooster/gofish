@@ -9,6 +9,8 @@
 
 #define OP_TIMEOUT_MSEC (20*1000)
 #define REQUEST_TIMER_TICK_MSEC 2
+#define REQUEST_TIMER_MAX_MSEC 30000
+#define REQUEST_MAX_ERROR_RETRIES 5
 #define REQUEST_MAX_INFLIGHT 5
 
 #define DEFAULT_CACHE_SIZE (1024*1024*128) // 128mb
@@ -16,4 +18,6 @@
 
 //#include <QString>
 //QString byteCountString(qint64 bytes);
+
 #endif // DEFAULTS_H
+

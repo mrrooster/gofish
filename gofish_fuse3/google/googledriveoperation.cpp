@@ -1,6 +1,6 @@
 #include "googledriveoperation.h"
 
-GoogleDriveOperation::GoogleDriveOperation()
+GoogleDriveOperation::GoogleDriveOperation() : mimeData(nullptr)
 {
 
 }

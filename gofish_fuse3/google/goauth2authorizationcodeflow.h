@@ -11,6 +11,7 @@ public:
     void resetStatus(QAbstractOAuth::Status status);
 
     virtual QNetworkReply *patch(const QUrl &url, const QByteArray &data);
+    virtual QNetworkReply *patch(const QUrl &url,  QHttpMultiPart *data);
 };
 
 #endif // GOAUTH2AUTHORIZATIONCODEFLOW_H
