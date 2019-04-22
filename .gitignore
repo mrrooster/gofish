@@ -7,3 +7,4 @@ build-gofish-*
 *.o
 moc_*.[ch]*
 *.pro.user.*
+._.gitignore
