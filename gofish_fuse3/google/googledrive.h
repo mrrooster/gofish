@@ -30,7 +30,7 @@ public:
     void uploadFile(QIODevice *file, QString path, QString fileId, QString parentId);
     void createFolder(QString path,QString fileId,QString parentId);
     void unlink(QString path,QString fileId);
-    void rename(QString fileId,QString oldParentId,QString newParentId,QString newName);
+    void rename(QString fileId,QString oldParentId,QString newParentId,QString newName,QString removeId);
     void updateMetadata(GoogleDriveObject *obj);
 
 signals:
@@ -67,6 +67,7 @@ private:
     void readFolder(QString startPath, QString nextPageToken, QString parentId);
     void readFileSection(QString fileId, qint64 start, qint64 length);
 
+    void unlink(QString path,QString fileId,std::function<void(QNetworkReply *,bool)> handler);
     void updateFileMetadata(QString fileId,QJsonDocument doc,std::function<void(QNetworkReply *,bool)> handler, QString oldParent="",QString newParent="");
 
     void queueOp(QUrl url, QVariantMap headers, std::function<void(QNetworkReply *, bool)> handler);

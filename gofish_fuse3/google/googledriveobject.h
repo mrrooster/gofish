@@ -43,7 +43,7 @@ public:
     qint64 read(qint64 start, qint64 totalLength);
     qint64 write(QByteArray data,qint64 start);
     qint64 unlinkChild(QString name);
-    qint64 takeItem(GoogleDriveObject *oldParent,QString name, QString newName);
+    qint64 takeItem(GoogleDriveObject *oldParent,QString name, QString newName); // takes a child object from another folder, used in rename
     QCache<QString,CacheEntry> *getCache() const;
     quint32 getRefreshSecs();
     void setCache(QCache<QString,CacheEntry> *cache);

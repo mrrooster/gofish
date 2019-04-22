@@ -76,7 +76,7 @@ GoogleDriveObject::GoogleDriveObject(GoogleDriveObject *parentObject,GoogleDrive
     connect(&this->metadataTimer,&QTimer::timeout,this,[=](){
         this->gofish->updateMetadata(this);
     });
-    connect(this->gofish,&GoogleDrive::unlinkComplete,[=](QString path,bool){
+    connect(this->gofish,&GoogleDrive::unlinkComplete,this,[=](QString path,bool){
         if (path==this->getPath()) {
             this->decreaseUsageCount();
             emit unlinkResponse(this->unlinkToken,true);
@@ -230,7 +230,7 @@ GoogleDriveObject *GoogleDriveObject::create(QString name)
                 this,
                 this->gofish,
                 "",
-                this->path,
+                getPath(),
                 name.replace(QRegExp("[/]"),"_"),
                 "application/octet-stream",
                 0,
@@ -347,10 +347,17 @@ qint64 GoogleDriveObject::takeItem(GoogleDriveObject *oldParent, QString name, Q
         if (child->getName()==name) {
             oldParent->contents.removeOne(child);
             child->name=newName;
+            QString removeId = "";
+            for(auto child2 : this->contents) {
+                if (child2->getName()==newName) {
+                    removeId=child2->id;
+                    break;
+                }
+            }
             this->contents.append(child);
 
             this->renameMap.insert(child->id,token);
-            this->gofish->rename(child->id,oldParent->id,this->id,newName);
+            this->gofish->rename(child->id,oldParent->id,this->id,newName,removeId);
             break;
         }
     }

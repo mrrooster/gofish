@@ -169,11 +169,7 @@ void GoogleDrive::createFolder(QString path, QString fileId, QString parentId)
 
 void GoogleDrive::unlink(QString path, QString fileId)
 {
-    QJsonObject obj;
-    QString fileName = path.mid(path.lastIndexOf("/")+1);
-    obj.insert("trashed",true);
-    QJsonDocument doc(obj);
-    updateFileMetadata(fileId,doc,[=](QNetworkReply *response,bool found){
+    unlink(path,fileId,[=](QNetworkReply *response,bool found){
         //if (responseData.isEmpty()) {
         //    D("Error'd/empty response from upload.");
         //    return;
@@ -185,10 +181,9 @@ void GoogleDrive::unlink(QString path, QString fileId)
             emit this->unlinkComplete(path,false);
         }
     });
-
 }
 
-void GoogleDrive::rename(QString fileId, QString oldParentId, QString newParentId, QString newName)
+void GoogleDrive::rename(QString fileId, QString oldParentId, QString newParentId, QString newName, QString removeId)
 {
     QJsonObject obj;
     obj.insert("name",QJsonValue(newName));
@@ -198,7 +193,8 @@ void GoogleDrive::rename(QString fileId, QString oldParentId, QString newParentI
     if (oldParentId==newParentId) {
         oldParentId = newParentId = "";
     }
-    updateFileMetadata(fileId,doc,[=](QNetworkReply *response,bool found){
+
+    std::function<void(QNetworkReply *,bool)> handler = [=](QNetworkReply *response,bool found){
         //if (responseData.isEmpty()) {
         //    D("Error'd/empty response from upload.");
         //    return;
@@ -210,7 +206,17 @@ void GoogleDrive::rename(QString fileId, QString oldParentId, QString newParentI
             D("Error updating metadata:"+response->errorString());
             emit this->renameComplete(fileId,false);
         }
-    },oldParentId,newParentId);
+    };
+    if (removeId=="") {
+        updateFileMetadata(fileId,doc,handler,oldParentId,newParentId);
+    } else {
+        unlink(removeId,removeId,[=](QNetworkReply* reply,bool){
+            if (reply->error()==QNetworkReply::NoError) {
+                updateFileMetadata(fileId,doc,handler,oldParentId,newParentId);
+            }
+        });
+    }
+
 }
 
 void GoogleDrive::updateMetadata(GoogleDriveObject *obj)
@@ -364,6 +370,15 @@ void GoogleDrive::readFileSection(QString fileId, qint64 start, qint64 length)
         this->inflightPaths.removeOne(id);
         emit pendingSegment(fileId,start,length);
     });
+}
+
+void GoogleDrive::unlink(QString path, QString fileId, std::function<void (QNetworkReply *, bool)> handler)
+{
+    QJsonObject obj;
+    QString fileName = path.mid(path.lastIndexOf("/")+1);
+    obj.insert("trashed",true);
+    QJsonDocument doc(obj);
+    updateFileMetadata(fileId,doc,handler);
 }
 
 void GoogleDrive::updateFileMetadata(QString fileId, QJsonDocument doc, std::function<void(QNetworkReply *,bool)> handler, QString oldParent, QString newParent)
