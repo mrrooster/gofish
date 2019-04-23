@@ -19,7 +19,7 @@ class GoogleDrive : public QObject
 public:
     enum ConnectionState { Disconnected,Connecting,Connected,ConnectionFailed };
 
-    explicit GoogleDrive(QObject *parent = nullptr);
+    explicit GoogleDrive(bool readOnly,QObject *parent = nullptr);
     ~GoogleDrive();
 
     bool pathInFlight(QString path);
@@ -55,6 +55,7 @@ private:
     QVector<QString> inflightPaths;
     QVector<GoogleDriveOperation*> queuedOps;
     QVector<QString> pregeneratedIds;
+    bool readOnly;
 
     QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;
 
@@ -74,6 +75,7 @@ private:
     void queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void(QNetworkReply *, bool)> handler);
     void queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void(QNetworkReply *, bool)> handler, std::function<void(QNetworkReply *)> inProgressHandler);
     void uploadFileContents(QIODevice *file, QString path, QString fileId, QString url);
+    int modeFromCapabilites(QJsonObject caps,bool folder);
 private slots:
     void operationTimerFired();
     void requestFinished(QNetworkReply *response);

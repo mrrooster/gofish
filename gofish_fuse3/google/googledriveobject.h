@@ -56,6 +56,7 @@ public:
     void setUid(uid_t uid);
     gid_t getGid();
     void setGid(gid_t gid);
+    void stopMetadataUpdate();
 
 //    void operator =(const GoogleDriveObject &other);
 signals:

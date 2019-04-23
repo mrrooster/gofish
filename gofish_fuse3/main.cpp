@@ -101,16 +101,18 @@ and 'secret' options.";
     QVector<QByteArray> fuseArgsData;
     fuseArgsData.append(argv[0]);
     bool showHelp = false;
+    bool readOnly = false;
     if (fuseArgs.size()!=1 || parser.isSet(helpOpt)) {
         showHelp = true;
     } else {
      //   fuseArgsData.append("-f");
         if (parser.isSet(optionsOpt)) {
             fuseArgsData.append("-o");
-            fuseArgsData.append(parser.value(optionsOpt).toLocal8Bit());
+            QString mountOptions = parser.value(optionsOpt);
+            fuseArgsData.append(mountOptions.toLocal8Bit());
+            readOnly = mountOptions.split(',').contains("ro");
         }
         fuseArgsData.append(fuseArgs.first().toLocal8Bit());
-
         if (!parser.isSet(foregroundOpt) && !g_debug ) {
             ::daemon(0,0);
         }
@@ -129,7 +131,7 @@ and 'secret' options.";
         return 1;
     }
 
-    GoogleDrive googledrive;
+    GoogleDrive googledrive(readOnly);
     FuseHandler *fuse=nullptr;
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {

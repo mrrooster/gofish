@@ -423,6 +423,7 @@ int GoogleDriveObject::getFileMode()
 void GoogleDriveObject::setFileMode(int mode)
 {
     this->fileMode = mode;
+    this->metadataTimer.start();
 }
 
 uid_t GoogleDriveObject::getUid()
@@ -433,6 +434,7 @@ uid_t GoogleDriveObject::getUid()
 void GoogleDriveObject::setUid(uid_t uid)
 {
     this->uid = uid;
+    this->metadataTimer.start();
 }
 
 gid_t GoogleDriveObject::getGid()
@@ -443,6 +445,12 @@ gid_t GoogleDriveObject::getGid()
 void GoogleDriveObject::setGid(gid_t gid)
 {
     this->gid = gid;
+    this->metadataTimer.start();
+}
+
+void GoogleDriveObject::stopMetadataUpdate()
+{
+    this->metadataTimer.stop();
 }
 
 void GoogleDriveObject::clearChildren(QVector<GoogleDriveObject*> except)

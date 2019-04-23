@@ -5,6 +5,7 @@
 #include <QJsonValue>
 #include <iostream>
 #include <QNetworkReply>
+#include <sys/stat.h>
 #include "googledriveobject.h"
 #include "googlenetworkaccessmanager.h"
 #include "goauth2authorizationcodeflow.h"
@@ -26,8 +27,9 @@ const QUrl files_upload("https://www.googleapis.com/upload/drive/v3/files");
 const QUrl files_get_ids("https://www.googleapis.com/drive/v3/files/generateIds");
 const QUrl files_metadata("https://www.googleapis.com/drive/v3/files");
 
-GoogleDrive::GoogleDrive(QObject *parent) : QObject(parent),auth(nullptr),state(Disconnected)
+GoogleDrive::GoogleDrive(bool readOnly, QObject *parent) : QObject(parent),auth(nullptr),state(Disconnected),readOnly(readOnly)
 {
+    D("Initialising google drive, readonly:"<<readOnly);
     //Operation timer
     connect(&this->operationTimer,&QTimer::timeout,this,&GoogleDrive::operationTimerFired);
 
@@ -224,7 +226,12 @@ void GoogleDrive::updateMetadata(GoogleDriveObject *obj)
     D("Updating metadata for:"<<obj->getInode());
     QDateTime timestamp;
     QJsonObject json;
+    QJsonObject appProperties;
 
+    appProperties.insert("gid",QJsonValue(static_cast<int>(obj->getGid())));
+    appProperties.insert("uid",QJsonValue(static_cast<int>(obj->getUid())));
+    appProperties.insert("fileMode",QJsonValue(obj->getFileMode()));
+    json.insert("appProperties",appProperties);
     json.insert("modifiedTime",QJsonValue(obj->getModifiedTime().toString(Qt::ISODate)+"Z"));
     QJsonDocument doc(json);
     updateFileMetadata(obj->getFileId(),doc,[=](QNetworkReply*,bool){});
@@ -260,6 +267,20 @@ void GoogleDrive::uploadFileContents(QIODevice *file, QString path, QString file
     emit this->uploadInProgress(path);
 }
 
+int GoogleDrive::modeFromCapabilites(QJsonObject caps,bool folder)
+{
+    int mode=0;
+    int writeUser = (readOnly)?0:S_IWUSR;
+    if (folder) {
+        mode |= caps["canAddChildren"].toBool()?writeUser:0;
+        mode |= caps["canListChildren"].toBool()?(S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IXOTH|S_IROTH):0;
+    } else {
+        mode |= caps["canEdit"].toBool()?writeUser:0;
+        mode |= caps["canDownload"].toBool()?(S_IRUSR|S_IXUSR|S_IRGRP|S_IROTH):0;
+    }
+    return mode;
+}
+
 void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString parentId)
 {
     D("readFolder: startPath:"<<startPath<<", parentId: "<<parentId<<", Next page token:"<<nextPageToken);
@@ -276,7 +297,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     if (!nextPageToken.isEmpty()) {
         query += QString("&pageToken=%1").arg(QString(QUrl::toPercentEncoding(nextPageToken," '")).replace(" ","+"));
     }
-    query += "&fields=*";//nextPageToken,files(name,size,mimeType,id,kind,createdTime,modifiedTime)&pageSize=1000";
+    query += "&fields=nextPageToken,files(name,size,mimeType,id,kind,createdTime,modifiedTime,capabilities(canDownload,canEdit,canAddChildren,canListChildren),appProperties(uid,gid,fileMode))&pageSize=1000";
     url.setQuery(query);
     queueOp(url,QVariantMap(),[=](QNetworkReply *response,bool found){
         QByteArray responseData = response->readAll();
@@ -287,7 +308,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
         }
 //        D("Got response data:"+responseData);
         QJsonDocument doc = QJsonDocument::fromJson(responseData);
- //       D("Got response:"<<doc);
+        D("Got response:"<<doc);
 
         if (doc.isObject()) {
             if (doc["files"].isArray()) {
@@ -314,6 +335,21 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                     fileInfo.insert("size",file["size"].toVariant());
                     fileInfo.insert("createdTime",file["createdTime"].toVariant());
                     fileInfo.insert("modifiedTime",file["modifiedTime"].toVariant());
+                    fileInfo.insert("fileMode",QVariant(this->modeFromCapabilites(file["capabilities"].toObject(),(file["mimeType"].toString()==GOOGLE_FOLDER)) ));
+
+                    if(file.toObject().contains("appProperties")) {
+                        QJsonObject appProperties = file["appProperties"].toObject();
+                        if (appProperties.contains("gid")) {
+                            fileInfo.insert("gid",appProperties["gid"].toVariant());
+                        }
+                        if (appProperties.contains("uid")) {
+                            fileInfo.insert("uid",appProperties["uid"].toVariant());
+                        }
+                        if (appProperties.contains("fileMode")) {
+                            fileInfo.insert("fileMode",appProperties["fileMode"].toVariant());
+                        }
+                    }
+
                     this->inflightValues.value(startPath)->append(fileInfo);
                 }
                 if (!doc["nextPageToken"].isString()) {
@@ -335,6 +371,11 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                                     QDateTime::fromString(file["modifiedTime"].toString(),"yyyy-MM-dd'T'hh:mm:ss.z'Z'"),
                                     nullptr
                                    );
+                        newObj->setFileMode(file["fileMode"].toInt());
+                        newObj->setUid(file.contains("uid") ? file["uid"].toUInt() : ::getuid());
+                        newObj->setGid(file.contains("gid") ? file["gid"].toUInt() : ::getgid());
+                        newObj->setFileMode(file.contains("fileMode") ? file["fileMode"].toUInt() : newObj->getFileMode());
+                        newObj->stopMetadataUpdate(); // setuid/gid calls have triggered deffered metadata update to google. Don't do this when creating.
                         newChildren.append(newObj);
                     }
                     emit remoteFolder(startPath,newChildren);
@@ -573,8 +614,11 @@ void GoogleDrive::authenticate()
     this->auth->setAccessTokenUrl(access_token_url);
     this->auth->setClientIdentifier(clientId);
     this->auth->setClientIdentifierSharedKey(clientSecret);
-//    this->auth->setScope("https://www.googleapis.com/auth/drive.readonly");
-    this->auth->setScope("https://www.googleapis.com/auth/drive");
+    if (this->readOnly) {
+        this->auth->setScope("https://www.googleapis.com/auth/drive.readonly");
+    } else {
+        this->auth->setScope("https://www.googleapis.com/auth/drive");
+    }
 
     D("Callback     :"<<handler->callback());
     D("Callback path:"<<handler->callbackPath());

@@ -1,7 +1,12 @@
-# GoFiSh 
+# GoFiSh
 
-Gofish is a *read only* fuse fs for mounting your Google drive, currently developed against libfuse3.
+Gofish is a *read only* fuse fs for mounting your Google drive (See *write support* below), currently developed against libfuse3.
 
+## Write support
+
+If gofish is mounted rw it will enable write support. This is currently quite new so use it at your own risk. A quick look at the source code will show there are no tests, and some of the logic is quite convoluted, so seriously, use at your own risk.
+
+Currently files are written to google once they are closed. Permissions and uid/gids are also written if set. Deleting remote files caused them to be 'trashed'.
 ## Running
 
 ### Dependencies
@@ -15,6 +20,8 @@ gofish requires a goodle API ID and secret before it is allowed to connect to yo
 To setup your client ID and client secret follow the instructions here:
 
 https://developers.google.com/drive/v3/web/about-auth
+
+If you want write support the application needs to be given **./auth/drive** scope, You should always add **./oath/drive.readonly** as this is used if the fs is mounted read only.
 
 Once you have a google client ID and client secret you can run gofish for the first time like this:
 
@@ -38,7 +45,7 @@ I currently run it with the following on Linux:
 sudo ./gofish -f -o ro,allow_other /path/to/mountpoint
 ```
 
-This will mount your google drive readonly with permission for everyone to read it. (The 'ro' option is probably not necesary, however the filesystem is currently readonly so it makes sense).
+This will mount your google drive readonly with permission for everyone to read it. Use 'ro' to mount the drive read only. This is recommended.
 
 
 ### Killing
@@ -102,14 +109,14 @@ If you want a static build that doesn't depend on libssl, you need a static buil
 ```
 $ fetch the open ssl source from www.openssl.org, For this example I use 1.1.0h.
 $ mkdir openssl-static
-$ cd openssl-static 
+$ cd openssl-static
 $ ../openssl-1.1.0h/config no-shared
 $ make
 ```
 
 #### Qt
 
-You will also need a static build of Qt. 
+You will also need a static build of Qt.
 
 ```
 $ cd <gofish-build-tools folder>
@@ -117,7 +124,7 @@ $ fetch the Qt sources, I used 5.10.1, and unpack them.
 $ mkdir qt-static
 $ cd qt-static
 $ ../qt-everywhere-src-5.10.1/configure -prefix $PWD -release -confirm-license -static -accessibility -qt-zlib -qt-libpng -qt-libjpeg -qt-xcb -qt-pcre -qt-freetype -no-glib -no-cups -no-sql-sqlite -no-qml-debug -no-opengl -no-egl -no-xinput2 -no-sm -no-icu -nomake examples -nomake tests -skip qtactiveqt -skip qtlocation -skip qtmultimedia -skip qtserialport -skip qtquickcontrols -skip qtquickcontrols2 -skip qtsensors -skip qtwebengine -skip qtwebsockets -skip qtxmlpatterns -skip qt3d -skip qtvirtualkeyboard -skip qtserialbus -skip qtspeech -skip qtsvg -skip qtwebchannel -skip qtwebglplugin -skip qtwebview -skip qtxmlpatterns -skip qtpurchasing -skip qtdoc -skip qtgamepad -skip qtgraphicaleffects -skip qtimageformats -skip qtcanvas3d -skip qtcharts -skip qttools -skip qtwayland -skip qtdeclarative -openssl-linked OPENSSL_LIBDIR=../openssl-static OPENSSL_INCDIR=../openssl-static/include
-$ make 
+$ make
 $ make install
 ```
 
