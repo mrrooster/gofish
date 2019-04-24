@@ -19,7 +19,7 @@ class GoogleDrive : public QObject
 public:
     enum ConnectionState { Disconnected,Connecting,Connected,ConnectionFailed };
 
-    explicit GoogleDrive(bool readOnly,QObject *parent = nullptr);
+    explicit GoogleDrive(bool readOnly, QString tempDir, QObject *parent = nullptr);
     ~GoogleDrive();
 
     bool pathInFlight(QString path);
@@ -32,6 +32,7 @@ public:
     void unlink(QString path,QString fileId);
     void rename(QString fileId,QString oldParentId,QString newParentId,QString newName,QString removeId);
     void updateMetadata(GoogleDriveObject *obj);
+    QString getTempDir();
 
 signals:
     void stateChanged(ConnectionState newState);
@@ -45,9 +46,16 @@ signals:
 
 private:
     qint64 inode;
+    qint64 bytesRead;
+    qint64 bytesWritten;
+    qint64 fuseRead;
+    qint64 fuseWritten;
+    qint64 requestCount;
+    qint64 maxQueuedRequests;
     GOAuth2AuthorizationCodeFlow *auth;
     QTimer refreshTokenTimer;
     QTimer operationTimer;
+    QTimer statsTimer;
     ConnectionState state;
     QMap<QString,QVector<QVariantMap>*> inflightValues;
     QMap<QString,QByteArray> pendingSegments;
@@ -56,6 +64,7 @@ private:
     QVector<GoogleDriveOperation*> queuedOps;
     QVector<QString> pregeneratedIds;
     bool readOnly;
+    QString tempDir;
 
     QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;
 
@@ -74,8 +83,9 @@ private:
     void queueOp(QUrl url, QVariantMap headers, std::function<void(QNetworkReply *, bool)> handler);
     void queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void(QNetworkReply *, bool)> handler);
     void queueOp(QUrl url, QVariantMap headers, QByteArray data, GoogleDriveOperation::HttpOperation op, std::function<void(QNetworkReply *, bool)> handler, std::function<void(QNetworkReply *)> inProgressHandler);
-    void uploadFileContents(QIODevice *file, QString path, QString fileId, QString url);
+    void uploadFileContents(QIODevice *fileArg, QString path, QString fileId, QString url);
     int modeFromCapabilites(QJsonObject caps,bool folder);
+    QString byteCountString(qint64 bytes);
 private slots:
     void operationTimerFired();
     void requestFinished(QNetworkReply *response);

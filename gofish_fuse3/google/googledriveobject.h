@@ -28,6 +28,7 @@ public:
     QString getMimeType() const;
     QString getFileId() const;
     qint64 getSize() const;
+    void setSize(qint64 size);
     qint64 getChildFolderCount();
     qint64 getBlockSize();
     qint64 getInode() const;
@@ -42,13 +43,14 @@ public:
     qint64 createDir(QString name);
     qint64 read(qint64 start, qint64 totalLength);
     qint64 write(QByteArray data,qint64 start);
+    void write(QByteArray data,qint64 start,qint64 token);
     qint64 unlinkChild(QString name);
     qint64 takeItem(GoogleDriveObject *oldParent,QString name, QString newName); // takes a child object from another folder, used in rename
     QCache<QString,CacheEntry> *getCache() const;
     quint32 getRefreshSecs();
     void setCache(QCache<QString,CacheEntry> *cache);
     void open(bool write);
-    qint64 close();
+    qint64 close(bool write);
     GoogleDriveObject *getParentObject();
     int getFileMode();
     void setFileMode(int mode);
@@ -57,6 +59,8 @@ public:
     gid_t getGid();
     void setGid(gid_t gid);
     void stopMetadataUpdate();
+    QString mimetypeFromName(QString name);
+    static QMap<QString,QString> typeMap;
 
 //    void operator =(const GoogleDriveObject &other);
 signals:
@@ -71,13 +75,16 @@ signals:
     void createDirResponse(qint64 requestToken,GoogleDriveObject *dir);
     void unlinkResponse(qint64 requestToken,bool found);
     void renameResponse(qint64 requestToken,bool ok);
+    void opInProgress(qint64 requestToken);
 
 private:
     static qint64 requestToken;
     static qint64 instanceCount;
     int usageCount;
+    int openCount; //inc on open
     qint64 instanceId;
     qint64 closeToken;
+    qint64 readToken;
     qint64 cacheChunkSize;
     qint64 readChunkSize;
     qint64 maxReadChunkSize;
@@ -99,6 +106,7 @@ private:
     gid_t gid;
     QFile *temporaryFile; // If not empty, file is disc backed
     QIODevice::OpenMode openMode; // Only used for open for write
+    bool fileUploadedToGoogle;
 
     GoogleDriveObject *parentObject;
     GoogleDrive *gofish;

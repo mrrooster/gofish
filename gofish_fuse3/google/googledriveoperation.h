@@ -4,6 +4,7 @@
 #include <QUrl>
 #include <QVariantMap>
 #include <QNetworkReply>
+#include <QDebug>
 
 class GoogleDriveOperation
 {
@@ -20,5 +21,7 @@ public:
     HttpOperation httpOp;
     QHttpMultiPart *mimeData;
 };
+
+QDebug operator<<(QDebug debug, const GoogleDriveOperation &o);
 
 #endif // GOOGLEDRIVEOPERATION_H

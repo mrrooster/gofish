@@ -11,6 +11,7 @@
 #include "fuse/fusehandler.h"
 
 #include <QDebug>
+#include <QDir>
 
 void messageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg);
 
@@ -32,6 +33,10 @@ int main(int argc, char *argv[])
     qInstallMessageHandler(messageOutput);
 
     QCommandLineParser parser;
+    QSettings settings;
+    settings.beginGroup("googledrive");
+    QString currentTemp = settings.value("temp_dir",QDir::tempPath()).toString();
+
     QCommandLineOption clientIdOpt("id","Set the google client ID, you must do this at least once.","Google client ID");
     QCommandLineOption clientSecretOpt("secret","Set the google client secret, you must do this at least once.","Google client secret");
     QCommandLineOption refreshSecondsOpt("refresh-secs","Set the number of seconds between refreshes, the longer this value is the better performance will be, however remote changes may not become visible.","Seconds");
@@ -40,6 +45,7 @@ int main(int argc, char *argv[])
     QCommandLineOption foregroundOpt(QStringList({"f","foreground"}),"Run in the foreground");
     QCommandLineOption optionsOpt(QStringList({"o","options"}),"mount options for fuse, eg: ro,allow_other","Options");
     QCommandLineOption debugOpt(QStringList({"d","debug"}),"Turn on debugging output, implies -f");
+    QCommandLineOption tmpOpt(QStringList({"t","temp-dir"}),QString("Sets the location uploaded files are saved to before they are sent to Google, if you do a lot of upload this folder should be large enough to hold the uploaded files. Current value: '%1'").arg(currentTemp),"temp dire");
     QCommandLineOption helpOpt(QStringList({"h","help"}),"Help. Show this help.");
 
     parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive. The refresh-secs, cache-bytes, id, secret and download-bytes options are saved to the settings file, and therefore only need to be specified once.");
@@ -53,6 +59,7 @@ int main(int argc, char *argv[])
     parser.addOption(clientSecretOpt);
     parser.addOption(cacheSizeOpt);
     parser.addOption(dloadOpt);
+    parser.addOption(tmpOpt);
     parser.addOption(refreshSecondsOpt);
     parser.addPositionalArgument("mountpoint","The mountpoint to use");
 
@@ -63,32 +70,24 @@ int main(int argc, char *argv[])
     parser.process(args);
 
     if (!parser.value(clientIdOpt).isEmpty()) {
-        QSettings settings;
-        settings.beginGroup("googledrive");
         settings.setValue("client_id",parser.value(clientIdOpt));
         settings.setValue("client_secret",parser.value(clientSecretOpt));
     }
     if (!parser.value(refreshSecondsOpt).isNull()) {
-        QSettings settings;
-        settings.beginGroup("googledrive");
         settings.setValue("refresh_seconds",parser.value(refreshSecondsOpt));
     }
     if (!parser.value(cacheSizeOpt).isNull()) {
-        QSettings settings;
-        settings.beginGroup("googledrive");
         settings.setValue("in_memory_cache_bytes",parser.value(cacheSizeOpt));
     }
     if (!parser.value(dloadOpt).isNull()) {
-        QSettings settings;
-        settings.beginGroup("googledrive");
         settings.setValue("download_chunk_bytes",parser.value(dloadOpt));
+    }
+    if (!parser.value(tmpOpt).isNull()) {
+        settings.setValue("temp_dir",parser.value(tmpOpt));
     }
     if (parser.isSet(debugOpt)) {
         g_debug = true;
     }
-
-    QSettings settings;
-    settings.beginGroup("googledrive");
 
     if (settings.value("client_id").isNull()) {
         qInfo() << "To use this you need a google API access key that has the 'Google Drive'\n\
@@ -131,7 +130,7 @@ and 'secret' options.";
         return 1;
     }
 
-    GoogleDrive googledrive(readOnly);
+    GoogleDrive googledrive(readOnly,settings.value("temp_dir",QDir::tempPath()).toString());
     FuseHandler *fuse=nullptr;
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {

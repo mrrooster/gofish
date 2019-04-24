@@ -31,6 +31,7 @@ public:
         size_t size;
         off_t off;
         qint64 token;
+        int count=0;
     };
 
 signals:
