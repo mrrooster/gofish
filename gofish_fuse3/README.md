@@ -4,9 +4,18 @@ Gofish is a *read only* fuse fs for mounting your Google drive (See *write suppo
 
 ## Write support
 
-If gofish is mounted rw it will enable write support. This is currently quite new so use it at your own risk. A quick look at the source code will show there are no tests, and some of the logic is quite convoluted, so seriously, use at your own risk.
+If gofish is mounted rw it will enable write support. This is currently quite new so use it at your own risk.
 
 Currently files are written to google once they are closed. Permissions and uid/gids are also written if set. Deleting remote files caused them to be 'trashed'.
+
+### Issues
+
+Because of the way gofish refreshes directory info new files may dissapear from directory listings if they're still uploading over a refresh. They'll come back eventually.
+
+### Temporary files
+
+By default files are staged locally in the default system temp folder, this can be overridden with the -t option (eg if you have /tmp memory backed and are uploading large files). The -t option persists.
+
 ## Running
 
 ### Dependencies
@@ -15,9 +24,9 @@ Gofish requires libfuse3. You should probably go and get that first. ;)
 
 ### First run
 
-gofish requires a goodle API ID and secret before it is allowed to connect to your google drive. These are supplied on the command line and only need to be specified once.
+gofish requires a goodle API ID and secret before it is allowed to connect to your google drive. These are used to identify an application to google. You can use the same api key for many instances of gofish, as the first run process ties it to a particular user. So you can easly generate an API key for your entire organisation.
 
-To setup your client ID and client secret follow the instructions here:
+As I don't supply these with gofish you have to register for your own API key. This proces isn't hard and more information can be found here:
 
 https://developers.google.com/drive/v3/web/about-auth
 
@@ -37,33 +46,36 @@ At this point change the 'localhost' section of the URL in your browser to the I
 
 ### Running normally
 
-Once you have registered and authorised with google the --id and --secret parameters are not required anymore. Currently gofish outputs quite a lot of debugging information so it's recommended that it's run in the foreground.
+Once you have registered and authorised with google the --id and --secret parameters are not required anymore.
 
-I currently run it with the following on Linux:
+I currently run it with the following on Linux, the -d option causes plenty of debugging output:
 
 ```
-sudo ./gofish -f -o ro,allow_other /path/to/mountpoint
+sudo ./gofish -d -o ro,allow_other /path/to/mountpoint
 ```
 
-This will mount your google drive readonly with permission for everyone to read it. Use 'ro' to mount the drive read only. This is recommended.
+This will mount your google drive readonly with permission for everyone to read it.
+
+Use 'ro' to mount the drive read only. This is recommended.
 
 
 ### Killing
 
-On linux you may find it doesn't respond to a CTRL-C. If you do ```sudo fusermount -u /path/to/mountpoint``` it should then exit cleanly.
+On linux you may find it doesn't respond to a CTRL-C. If you do `sudo fusermount -u /path/to/mountpoint` it should then exit cleanly.
 
 ### Options
 
 There are a few options you can tune to improve performance:
 
 |Option|Description|
-|--|--|
+|:-----|:----------|
 |_refresh-secs_|This controls how long directory information is cached for. If your drive contents don't change that often you can set this to a high value to reduce the number of reads from Google. The default is 600 seconds.|
 |_cache-bytes_|This controls how many bytes the in memory block cache uses. The default is 128MB.|
 |_download-size_|This sets the amount of data that is downloaded in one request. You can probably leave this at it's default of 2MiB, however if you have a much faster or slower connection you may wish to change this. A good rule of thumb is about a quarter of whatever your internet speed is. So if you can download at 1MiB/sec you should probably set this to 256K. The value is in bytes. For example 256K this would be 262144.|
 |_-f_|Don't go to the background.|
-|_-d_|Enable debug output. Should be used with -f|
-|_-o <options>_|This allows you to pass mount options to FUSE.
+|_-d_|Enable debug output. Implies -f|
+|_-t &lt;temp folder&gt;_|Set the temporary file location for uploaded files. You can use -h to see the current value|
+|_-o &lt;options&gt;_|This allows you to pass mount options to FUSE.|
 
 ## Building
 
