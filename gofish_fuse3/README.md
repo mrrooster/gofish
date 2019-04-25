@@ -81,7 +81,7 @@ There are a few options you can tune to improve performance:
 
 Gofish is written using Qt, and requires at least version 5.8. Qt requires SSL support too.
 
-Currently it's developed on NetBSD against refuse, although it's also tested occasionally on Debian and Ubuntu.
+Currently it's developed on FreeBSD against libfuse3. It gets built on Ubuntu occasionally too.
 
 To build, get a copy of the source code:
 
