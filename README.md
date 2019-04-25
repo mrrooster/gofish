@@ -1,6 +1,6 @@
 # GoFiSh 
 
-Gofish is a *read only* fuse fs for mounting your Google drive.
+Gofish is a fuse fs for mounting your Google drive.
 
 ##
 
@@ -8,7 +8,7 @@ gofish_fuse3 is the current version, gofish_netbsd is the last version based on 
 
 ### gofish_fuse3
 
-This version has the multithreading removed and uses the fuse lowlevel api and is much more stable. It requires libfuse3.
+This is built on libfuse3 and has (beta) support for writing.
 
 ### gofish_netbsd
 
