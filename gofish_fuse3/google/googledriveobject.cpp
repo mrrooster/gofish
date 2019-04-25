@@ -365,7 +365,6 @@ void GoogleDriveObject::setModifiedTime(QDateTime time)
 qint64 GoogleDriveObject::getChildren()
 {
     qint64 token = this->requestToken++;
-    qint64 currentSecs = QDateTime::currentSecsSinceEpoch();
     QString fullPath = getPath();
     D("In get children of: "<<fullPath<<", token:"<<token);
     if (this->isFolder()) {
@@ -425,10 +424,11 @@ GoogleDriveObject *GoogleDriveObject::create(QString name)
     return newObj;
 }
 
-qint64 GoogleDriveObject::createDir(QString name)
+qint64 GoogleDriveObject::createDir(QString name,mode_t mode)
 {
     qint64 token = this->requestToken++;
     auto folder = create(name);
+    folder->setFileMode(mode);
     this->childFolderCount++;
     folder->mimeType = GOOGLE_FOLDER;
     this->gofish->createFolder(folder->getPath(),folder->id,this->id);
@@ -595,7 +595,7 @@ qint64 GoogleDriveObject::close(bool write)
             qint64 pos = this->temporaryFile->size();
             qint64 readToken = read(pos,this->size-pos);
             this->closeToken = token;
-            connect(this,&GoogleDriveObject::readResponse,this->temporaryFile,[=](QByteArray data,qint64 reqToken){
+            connect(this,&GoogleDriveObject::readResponse,this->temporaryFile,[=](QByteArray ,qint64 reqToken){
                 if (readToken==reqToken) {
                     this->writeTempFileToGoogle(token);
                 }

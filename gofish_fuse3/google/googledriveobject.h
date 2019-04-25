@@ -40,7 +40,7 @@ public:
     qint64 getChildren();
     void setChildren(QVector<GoogleDriveObject*> newChildren);
     GoogleDriveObject *create(QString name);
-    qint64 createDir(QString name);
+    qint64 createDir(QString name, mode_t mode);
     qint64 read(qint64 start, qint64 totalLength);
     qint64 write(QByteArray data,qint64 start);
     void write(QByteArray data,qint64 start,qint64 token);
