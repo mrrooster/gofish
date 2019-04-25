@@ -79,7 +79,7 @@ There are a few options you can tune to improve performance:
 
 ## Building
 
-Gofish is written using Qt, and requires at least version 5.8. Qt requires SSL support too.
+Gofish is written using Qt, and requires at least version 5.8 with SSL support.
 
 Currently it's developed on FreeBSD against libfuse3. It gets built on Ubuntu occasionally too.
 
