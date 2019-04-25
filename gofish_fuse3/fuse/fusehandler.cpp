@@ -127,7 +127,7 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                 }
                 if (op.op==ReadDir) {
                     D("ReadDir op:"<<op);
-                    qint64 size = 0;
+                    size_t size = 0;
                     struct stat stbuf;
                     size += fuse_add_direntry(op.req,nullptr,0,".",nullptr,0);
                     size += fuse_add_direntry(op.req,nullptr,0,"..",nullptr,0);
@@ -137,7 +137,7 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                     }
                     char *dirBuff = new char[size];
                     memset(dirBuff,0,size);
-                    qint64 off=0;
+                    off_t off=0;
                     stbuf.st_ino = obj->getInode();
                     // FIX ALL THIS
                     off += fuse_add_direntry(op.req,dirBuff+off,size-off,".",&stbuf,1);
@@ -327,7 +327,7 @@ void FuseHandler::lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     addOp(op);
 }
 
-void FuseHandler::readDir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, fuse_file_info *fi)
+void FuseHandler::readDir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, fuse_file_info *)
 {
     D("In fuse readdir"<<ino<<size<<off);
     InflightOp op;
@@ -347,7 +347,7 @@ void FuseHandler::readDir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off
     addOp(op);
 }
 
-void FuseHandler::getAttr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
+void FuseHandler::getAttr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *)
 {
     D("getAttr, Inode:"<<ino);
 
@@ -442,7 +442,7 @@ void FuseHandler::release(fuse_req_t req, fuse_ino_t ino, fuse_file_info *fi)
     addOp(op);
 }
 
-void FuseHandler::read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, fuse_file_info *fi)
+void FuseHandler::read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, fuse_file_info *)
 {
     GoogleDriveObject *item = this->inodeToDir.value(ino);
     if (!item) {
@@ -461,7 +461,7 @@ void FuseHandler::read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, f
     addOp(op);
 }
 
-void FuseHandler::write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, fuse_file_info *fi)
+void FuseHandler::write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, fuse_file_info *)
 {
     GoogleDriveObject *item = this->inodeToDir.value(ino);
     if (!item) {
@@ -491,6 +491,7 @@ void FuseHandler::create(fuse_req_t req, fuse_ino_t parent, const char *name, mo
     fi->fh=true; // set to indicatea write
     //GoogleDriveObject(GoogleDrive *gofish, QString id, QString path, QString name, QString mimeType, qint64 size, QDateTime ctime, QDateTime mtime, QCache<QString,QByteArray> *cache,QObject *parent=nullptr);
     GoogleDriveObject *item = parentItem->create(name);
+    item->setFileMode(mode);
     item->open(true);
     addObjectForInode(item);
     struct fuse_entry_param ent;
@@ -517,7 +518,7 @@ void FuseHandler::mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mod
     op.size = 0;
     op.off = 0;
     op.inode = parent;
-    op.token = parentItem->createDir(name);
+    op.token = parentItem->createDir(name,mode);
     op.op = MkDir;
     addOp(op);
 }
@@ -564,11 +565,10 @@ void FuseHandler::rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
     addOp(op);
 }
 
-void FuseHandler::rename(fuse_req_t req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname, unsigned int flags)
+void FuseHandler::rename(fuse_req_t req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname, unsigned int )
 {
     D("In fuse_rename");
     GoogleDriveObject *oldParent = this->inodeToDir.value(parent);
-    GoogleDriveObject *item;
     GoogleDriveObject *newParent = this->inodeToDir.value(newparent);
 
     if (!oldParent || !newParent) {
@@ -587,12 +587,12 @@ void FuseHandler::rename(fuse_req_t req, fuse_ino_t parent, const char *name, fu
     addOp(op);
 }
 
-void FuseHandler::fuse_init(void *userdata,struct fuse_conn_info *conn)
+void FuseHandler::fuse_init(void *,struct fuse_conn_info *)
 {
     SD("In fuse_init");
 }
 
-void FuseHandler::fuse_destroy(void *userdata)
+void FuseHandler::fuse_destroy(void *)
 {
     SD("In fuse destroy");
 }
@@ -670,7 +670,7 @@ void FuseHandler::eventTick()
     fds[0].fd = fd;
     fds[0].events = POLLIN;
     fds[0].revents= 0;
-    this->pollDelay += (this->pollDelay)<1000?1:0;
+    this->pollDelay += (this->pollDelay)<2000?3:0;
     if (::poll((struct pollfd*)&fds,1,0)>0) {
         struct fuse_buf buff;
 

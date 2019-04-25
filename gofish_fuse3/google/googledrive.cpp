@@ -170,7 +170,7 @@ void GoogleDrive::uploadFile(QIODevice *file, QString path, QString fileId, QStr
     headers.insert("Content-Length",bodyContent.size());
     D("Metadata for upload:"+bodyContent);
 
-    queueOp(url,headers,doc.toJson(),op,[=](QNetworkReply *response,bool found){
+    queueOp(url,headers,doc.toJson(),op,[=](QNetworkReply *response,bool){
         //if (responseData.isEmpty()) {
         //    D("Error'd/empty response from upload.");
         //    return;
@@ -201,7 +201,7 @@ void GoogleDrive::createFolder(QString path, QString fileId, QString parentId)
 
 void GoogleDrive::unlink(QString path, QString fileId)
 {
-    unlink(path,fileId,[=](QNetworkReply *response,bool found){
+    unlink(path,fileId,[=](QNetworkReply *response,bool ){
         //if (responseData.isEmpty()) {
         //    D("Error'd/empty response from upload.");
         //    return;
@@ -226,7 +226,7 @@ void GoogleDrive::rename(QString fileId, QString oldParentId, QString newParentI
         oldParentId = newParentId = "";
     }
 
-    std::function<void(QNetworkReply *,bool)> handler = [=](QNetworkReply *response,bool found){
+    std::function<void(QNetworkReply *,bool)> handler = [=](QNetworkReply *response,bool ){
         //if (responseData.isEmpty()) {
         //    D("Error'd/empty response from upload.");
         //    return;
@@ -288,7 +288,7 @@ void GoogleDrive::uploadFileContents(QIODevice *fileArg, QString path, QString f
     bool isDir = (fileArg==nullptr);
     QPointer<QIODevice> file = fileArg;
 
-    queueOp(url,headers,data,op,[=](QNetworkReply *reply,bool ok){
+    queueOp(url,headers,data,op,[=](QNetworkReply *,bool ok){
         D("UFC: in response"<<(file)<<ok<<path<<fileId<<url<<pos);
         if (ok) {
             if (isDir || !file || file->atEnd()) {
@@ -464,7 +464,7 @@ void GoogleDrive::readFileSection(QString fileId, qint64 start, qint64 length)
 
     extraHeaders.insert("Range",QString("bytes=%1-%2").arg(start).arg(start+length-1));
 
-    queueOp(url,extraHeaders,[=](QNetworkReply *response,bool found){
+    queueOp(url,extraHeaders,[=](QNetworkReply *response,bool ){
         QByteArray responseData = response->readAll();
         this->pendingSegments.insert(id,responseData);
         D("Got file section response, size:"<<responseData.size());

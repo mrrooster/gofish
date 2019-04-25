@@ -60,21 +60,21 @@ private:
     void setupStat(GoogleDriveObject *item,struct stat *stbuf);
 
     void lookup(fuse_req_t req, fuse_ino_t parent, const char *name);
-    void readDir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
-    void getAttr(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
-    void setAttr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *fi);
+    void readDir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *);
+    void getAttr(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *);
+    void setAttr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set, struct fuse_file_info *);
     void open(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
     void release(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
-    void read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
-    void write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *fi);
-    void create(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode, struct fuse_file_info *fi);
+    void read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *);
+    void write(fuse_req_t req, fuse_ino_t ino, const char *buf, size_t size, off_t off, struct fuse_file_info *);
+    void create(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode, struct fuse_file_info *);
     void mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode);
     void unlink(fuse_req_t req, fuse_ino_t parent, const char *name);
     void rmdir(fuse_req_t req, fuse_ino_t parent, const char *name);
     void rename(fuse_req_t req, fuse_ino_t parent, const char *name, fuse_ino_t newparent, const char *newname, unsigned int flags);
     // fuse callbacks
-    static void fuse_init(void *userdata, struct fuse_conn_info *conn);
-    static void fuse_destroy(void *userdata);
+    static void fuse_init(void *, struct fuse_conn_info *);
+    static void fuse_destroy(void *);
     static void fuse_lookup(fuse_req_t req, fuse_ino_t parent, const char *name);
     static void fuse_read_dir (fuse_req_t req, fuse_ino_t ino, size_t size, off_t off, struct fuse_file_info *fi);
     static void fuse_get_attr(fuse_req_t req, fuse_ino_t ino,struct fuse_file_info *fi);
