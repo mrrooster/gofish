@@ -8,7 +8,11 @@
 #define CACHE_CHUNK_SIZE (1024*128)   // Cache 64k 'blocks'
 
 #define OP_TIMEOUT_MSEC (20*1000)
+// The initial request timer starts at.,,,,,
 #define REQUEST_TIMER_TICK_MSEC 2
+// multiple requests will slowly back off to a constant rate of....
+#define REQUEST_TIMER_TICK_MSEC_MAX 1000
+// or if there's an error to...
 #define REQUEST_TIMER_MAX_MSEC 30000
 #define REQUEST_MAX_ERROR_RETRIES 5
 #define REQUEST_MAX_INFLIGHT 5

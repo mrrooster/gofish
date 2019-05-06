@@ -261,6 +261,12 @@ GoogleDriveObject::GoogleDriveObject(GoogleDriveObject *parentObject,GoogleDrive
     this->metadataTimer.setSingleShot(true);
     this->metadataTimer.setInterval(3000);
     D("New google object: "<<*this);
+
+    QTimer::singleShot(100,[=](){
+        if (this->isFolder()) {
+            this->getChildren();
+        }
+    });
 }
 
 GoogleDriveObject::~GoogleDriveObject()

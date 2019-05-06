@@ -554,11 +554,13 @@ void GoogleDrive::operationTimerFired()
 {
     if (this->queuedOps.isEmpty()) {
         D("Operation queue empty.");
+        this->operationTimer.setInterval(REQUEST_TIMER_TICK_MSEC);
         this->operationTimer.stop();
     } else {
         D("Current state: "<<this->state);
         if (this->state == Connected) {
-            this->operationTimer.setInterval(REQUEST_TIMER_TICK_MSEC);
+            quint64 interval = this->operationTimer.interval() * 2;
+            this->operationTimer.setInterval( (interval>REQUEST_TIMER_TICK_MSEC_MAX) ? REQUEST_TIMER_TICK_MSEC_MAX : interval );
             //D("************"<<this->inprogressOps.size());
             if (this->inprogressOps.size()>REQUEST_MAX_INFLIGHT) {
                 D("More than "<<REQUEST_MAX_INFLIGHT<<"inflight.");
