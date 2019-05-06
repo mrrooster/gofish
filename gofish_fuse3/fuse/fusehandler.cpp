@@ -149,9 +149,9 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                         //D("Fuse_add_dir: off:"<<off<<"size:"<<size<<"len:"<<len<<"name:"<<nameData);
                         off += fuse_add_direntry(op.req,dirBuff+off,size-off,nameData.data(),&stbuf,off+len);
                     }
-                    if (op.off>=size) {
-                        fuse_reply_buf(op.req,nullptr,0);
-                       // D("Sending empty entry.");
+                    if (op.off>=off) {
+                        fuse_reply_buf(op.req,dirBuff,0);
+                        D("Sending empty dir entry. off:"<<off<<",op.off:"<<op.off);
                     } else {
                         fuse_reply_buf(op.req,dirBuff+op.off,((size-op.off)<op.size?size-op.off:op.size));
                        // D("fuse_reply_buf: "<<"buff+"<<op.off<<((size-op.off)<op.size?(size-op.off):op.size));
