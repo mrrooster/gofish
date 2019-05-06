@@ -142,6 +142,13 @@ void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
                     // FIX ALL THIS
                     off += fuse_add_direntry(op.req,dirBuff+off,size-off,".",&stbuf,1);
                     off += fuse_add_direntry(op.req,dirBuff+off,size-off,"..",&stbuf,2);
+
+                    // FIX THIS
+                    if (op.off==2 && children.isEmpty()) {
+                        fuse_reply_buf(op.req,dirBuff,0);
+                        return;
+                    }
+
                     for(GoogleDriveObject *child : children) {
                         QByteArray nameData = child->getName().toUtf8();
                         setupStat(child,&stbuf);
