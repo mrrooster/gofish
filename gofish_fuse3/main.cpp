@@ -45,14 +45,14 @@ int main(int argc, char *argv[])
 
     QCommandLineOption clientIdOpt("id","Set the google client ID, you must do this at least once.","Google client ID");
     QCommandLineOption clientSecretOpt("secret","Set the google client secret, you must do this at least once.","Google client secret");
-    QCommandLineOption refreshSecondsOpt("refresh-secs",QString("Set the number of seconds between directory information refreshes, the longer this value is the better performance will be, however remote changes may not become visible. IF you use the precache-dirs option then setting this optiont too low will result in constant traffic to google, which is not desirable. Currently: %1 seconds").arg(currentRefreshSecs),"Seconds");
+    QCommandLineOption refreshSecondsOpt("refresh-secs",QString("Set the number of seconds between directory information refreshes, the longer this value is the better performance will be, however remote changes may not become visible. IF you use the precache-dirs option then setting this option too low will result in constant traffic. Currently: %1 seconds").arg(currentRefreshSecs),"Seconds");
     QCommandLineOption cacheSizeOpt("cache-bytes",QString("Set the size of the in memory block cache in bytes. Genearlly more memory is good. Currently: %1 bytes (%2)").arg(currentCacheSize).arg(byteCountString(currentCacheSize)),"Bytes");
-    QCommandLineOption dloadOpt("download-size",QString("How much data to download in each request, this should be roughly a quater of your total download speed. Currently: %1 bytes (%2)").arg(currentDownloadSize).arg(byteCountString(currentDownloadSize)),"Bytes");
+    QCommandLineOption dloadOpt("download-size",QString("How much data to download in each request. Currently: %1 bytes (%2)").arg(currentDownloadSize).arg(byteCountString(currentDownloadSize)),"Bytes");
     QCommandLineOption precacheOpt("precache-dirs","Causes gofish to fetch the enitre directory tree, minimises the initial pause when accessing a directory at the expense of some initial bandwith usage.");
     QCommandLineOption foregroundOpt(QStringList({"f","foreground"}),"Run in the foreground");
     QCommandLineOption optionsOpt(QStringList({"o","options"}),"mount options for fuse, eg: ro,allow_other","Options");
     QCommandLineOption debugOpt(QStringList({"d","debug"}),"Turn on debugging output, implies -f");
-    QCommandLineOption tmpOpt(QStringList({"t","temp-dir"}),QString("Sets the location uploaded files are saved to before they are sent to Google, if you do a lot of upload this folder should be large enough to hold the uploaded files. Currently: '%1'").arg(currentTemp),"temp dire");
+    QCommandLineOption tmpOpt(QStringList({"t","temp-dir"}),QString("Sets the location uploaded files are saved to before they are sent to Google, if you do a lot of upload this folder should be large enough to hold the uploaded files. Currently: '%1'").arg(currentTemp),"temp dir");
     QCommandLineOption helpOpt(QStringList({"h","help"}),"Help. Show this help.");
 
     parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive. The refresh-secs, cache-bytes, id, secret and download-bytes options are saved to the settings file, and therefore only need to be specified once.\n\nOptions that take a byte value can use a k,m or g suffix for KiB,MiB and GiB respectivly.");

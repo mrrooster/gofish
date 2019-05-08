@@ -3,11 +3,11 @@
 
 // Setup some values for performance tuning (it's an fs after all..)
 // NB: READ_CHUNK_SIZE must be the same or an exact multiple of CACHE_CHUNK_SIZE
-#define READ_CHUNK_SIZE (1024*1024*10) // 2MB for now.
+#define READ_CHUNK_SIZE (1024*1024*8) // 8MB for now.
 #define UPLOAD_CHUNK_SIZE READ_CHUNK_SIZE
 #define CACHE_CHUNK_SIZE (1024*128)   // Cache 128k 'blocks'
 
-#define OP_TIMEOUT_MSEC (20*1000)
+#define OP_TIMEOUT_MSEC (30*1000)
 // The initial request timer starts at.,,,,,
 #define REQUEST_TIMER_TICK_MSEC 2
 // multiple requests will slowly back off to a constant rate of....
@@ -18,7 +18,7 @@
 #define REQUEST_MAX_INFLIGHT 2
 
 #define DEFAULT_CACHE_SIZE (1024*1024*32) // 32MB
-#define DEFAULT_REFRESH_SECS 600
+#define DEFAULT_REFRESH_SECS 3600
 
 //#include <QString>
 //QString byteCountString(qint64 bytes);

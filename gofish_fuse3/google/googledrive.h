@@ -36,6 +36,7 @@ public:
     QString getTempDir();
     bool getPrecacheDirs();
     void setPrecacheDirs(bool precache);
+    void addObjectToScan(GoogleDriveObject *obj);
 
 signals:
     void stateChanged(ConnectionState newState);
@@ -66,6 +67,7 @@ private:
     QVector<QString> inflightPaths;
     QVector<GoogleDriveOperation*> queuedOps;
     QVector<QString> pregeneratedIds;
+    QVector<GoogleDriveObject*> objectsToScan;
     bool readOnly;
     QString tempDir;
     bool precacheDirs;

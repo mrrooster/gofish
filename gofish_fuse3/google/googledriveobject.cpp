@@ -262,12 +262,8 @@ GoogleDriveObject::GoogleDriveObject(GoogleDriveObject *parentObject,GoogleDrive
     this->metadataTimer.setInterval(3000);
     D("New google object: "<<*this);
 
-    if (this->gofish->getPrecacheDirs()) {
-        QTimer::singleShot(500,[=](){
-            if (this->isFolder()) {
-                this->getChildren();
-            }
-        });
+    if (this->gofish->getPrecacheDirs() && isFolder()) {
+        this->gofish->addObjectToScan(this);
     }
 }
 

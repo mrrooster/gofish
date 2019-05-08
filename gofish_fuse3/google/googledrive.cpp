@@ -284,6 +284,20 @@ void GoogleDrive::setPrecacheDirs(bool precache)
     this->precacheDirs = precache;
 }
 
+void GoogleDrive::addObjectToScan(GoogleDriveObject *obj)
+{
+    if (this->objectsToScan.contains(obj)) {
+        return;
+    }
+    connect(obj,&QObject::destroyed,[=](){
+        this->objectsToScan.removeOne(obj);
+    });
+    this->objectsToScan.append(obj);
+    if (!this->operationTimer.isActive()) {
+        this->operationTimer.start();
+    }
+}
+
 void GoogleDrive::uploadFileContents(QIODevice *fileArg, QString path, QString fileId,QString url)
 {
     QVariantMap headers;
@@ -372,6 +386,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     query += "&fields=nextPageToken,files(name,size,mimeType,id,kind,createdTime,modifiedTime,capabilities(canDownload,canEdit,canAddChildren,canListChildren),appProperties(uid,gid,fileMode))&pageSize=1000";
     url.setQuery(query);
     queueOp(url,QVariantMap(),[=](QNetworkReply *response,bool found){
+       // D("readFolder-FIN: startPath:"<<startPath<<", parentId: "<<parentId<<", Next page token:"<<nextPageToken);
         QByteArray responseData = response->readAll();
         //D("Read file response data:"<<responseData);
         if (responseData.isEmpty()||!found) {
@@ -558,16 +573,20 @@ void GoogleDrive::queueOp(QUrl url, QVariantMap headers, QByteArray data, Google
         this->maxQueuedRequests = this->queuedOps.size();
     }
     if (!this->operationTimer.isActive()) {
-        this->operationTimer.start(REQUEST_TIMER_TICK_MSEC);
+        this->operationTimer.start();
     }
 }
 
 void GoogleDrive::operationTimerFired()
 {
     if (this->queuedOps.isEmpty()) {
-        this->operationTimer.setInterval(REQUEST_TIMER_TICK_MSEC);
         this->operationTimer.stop();
-        D(QString("Operation queue empty, operation timer set to %1 msec.").arg(operationTimer.interval()));
+        if (!this->objectsToScan.isEmpty()) {
+            this->objectsToScan.takeFirst()->getChildren();
+        } else {
+            D(QString("Operation queue empty, operation timer set to %1 msec.").arg(operationTimer.interval()));
+            this->operationTimer.setInterval(REQUEST_TIMER_TICK_MSEC);
+        }
     } else {
         D(QString("Current state: %1 - Operation timer at %2 msec.")
           .arg(_connectionStateString(this->state))
@@ -599,13 +618,13 @@ void GoogleDrive::operationTimerFired()
                     response = this->auth->get(op->url);
                 }
                 D("Inflight response: "<<response);
-                connect(response,&QNetworkReply::uploadProgress,response,[=](qint64 bytesWritten, qint64 total){
+                connect(response,&QNetworkReply::uploadProgress,[=](qint64 bytesWritten, qint64 total){
                     op->inProgressHandler(response);
                     if (total>0 && bytesWritten==total) {
                         this->bytesWritten += total;
                     }
                 });
-                connect(response,&QNetworkReply::downloadProgress,response,[=](qint64 bytesRead,qint64 total){
+                connect(response,&QNetworkReply::downloadProgress,[=](qint64 bytesRead,qint64 total){
                     if (total>0 && bytesRead==total) {
                         this->bytesRead += total;
                     }
@@ -637,7 +656,7 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
             op->handler(response,true);
             delete op;
         } else {
-            int msec = REQUEST_TIMER_TICK_MSEC;
+            int msec = operationTimer.interval();
             if (response->error()==QNetworkReply::ContentNotFoundError) {
                 D("Not found.");
                 op->handler(response,false);
