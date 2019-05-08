@@ -20,7 +20,7 @@ class FuseHandler : public QObject
 {
     Q_OBJECT
 public:
-    explicit FuseHandler(int argc, char *argv[], GoogleDrive *gofish, QObject *parent = nullptr);
+    explicit FuseHandler(int argc, char *argv[], GoogleDrive *gofish, qint64 refreshSecs, QObject *parent = nullptr);
     enum Operation { ReadDir,Lookup,Read,Write,Release,MkDir,Unlink,Rename};
     struct InflightOp {
         Operation op;
@@ -43,6 +43,7 @@ private:
     struct fuse_session *session;
     QTimer eventTickTimer;
     QTimer timeOutTimer;
+    QTimer refreshTimer;
     GoogleDrive *gofish;
     GoogleDriveObject *root;
     QMap<fuse_ino_t,GoogleDriveObject *> inodeToDir;

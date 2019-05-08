@@ -16,7 +16,7 @@
 #define SD(x)
 #endif
 
-FuseHandler::FuseHandler(int argc, char *argv[],GoogleDrive *gofish, QObject *parent) : QObject(parent),
+FuseHandler::FuseHandler(int argc, char *argv[], GoogleDrive *gofish, qint64 refreshSecs, QObject *parent) : QObject(parent),
 	root(nullptr),
     cache(nullptr),
     pollDelay(0)
@@ -50,6 +50,12 @@ FuseHandler::FuseHandler(int argc, char *argv[],GoogleDrive *gofish, QObject *pa
     connect(&this->timeOutTimer,&QTimer::timeout,this,&FuseHandler::timeOutTick);
     this->timeOutTimer.setSingleShot(false);
     this->timeOutTimer.start(OP_TIMEOUT_MSEC);
+    connect(&this->refreshTimer,&QTimer::timeout,this,[=](){
+        D("Refreshing root folder.");
+        this->initRoot();
+    });
+    this->refreshTimer.setSingleShot(false);
+    this->refreshTimer.start(refreshSecs * 1000);
 }
 
 void FuseHandler::initRoot()
@@ -69,7 +75,8 @@ void FuseHandler::initRoot()
     }
 
     if (this->root) {
-        QTimer::singleShot(600000,this->root,&QObject::deleteLater);
+        //QTimer::singleShot(600000,this->root,&QObject::deleteLater);
+        this->root->deleteLater();
     }
     this->inodeToDir.clear();
     this->root  = new GoogleDriveObject(

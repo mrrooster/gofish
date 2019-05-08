@@ -13,7 +13,7 @@
 
 #define DEBUG_GOOGLEDRIVE
 #ifdef DEBUG_GOOGLEDRIVE
-#define D(x) qDebug() << QString("[GoogleDrive::%1]").arg(QString::number((quint64)this,16)).toUtf8().data() << x
+#define D(x) qDebug().noquote() << QString("[GoogleDrive::%1]").arg(QString::number((quint64)this,16)).toUtf8().data() << x
 #else
 #define D(x)
 #endif
@@ -27,7 +27,7 @@ const QUrl files_upload("https://www.googleapis.com/upload/drive/v3/files");
 const QUrl files_get_ids("https://www.googleapis.com/drive/v3/files/generateIds");
 const QUrl files_metadata("https://www.googleapis.com/drive/v3/files");
 
-GoogleDrive::GoogleDrive(bool readOnly, QString tempDir, QObject *parent) : QObject(parent),auth(nullptr),state(Disconnected),readOnly(readOnly),tempDir(tempDir)
+GoogleDrive::GoogleDrive(bool readOnly, QString tempDir, QObject *parent) : QObject(parent),auth(nullptr),state(Disconnected),readOnly(readOnly),tempDir(tempDir),precacheDirs(false)
 {
     //Operation timer
     connect(&this->operationTimer,&QTimer::timeout,this,&GoogleDrive::operationTimerFired);
@@ -57,6 +57,8 @@ GoogleDrive::GoogleDrive(bool readOnly, QString tempDir, QObject *parent) : QObj
         data = QString("Max req queue   : %1").arg(this->maxQueuedRequests);
         D(data);
         data = QString("Curr req queue  : %1").arg(this->queuedOps.size());
+        D(data);
+        data = QString("In progress     : %1").arg(this->inprogressOps.size());
         D(data);
         data = QString("FS bytes read   : %1 (%2)").arg(this->fuseRead).arg(this->byteCountString(this->fuseRead));
         D(data);
@@ -270,6 +272,16 @@ void GoogleDrive::updateMetadata(GoogleDriveObject *obj)
 QString GoogleDrive::getTempDir()
 {
     return this->tempDir;
+}
+
+bool GoogleDrive::getPrecacheDirs()
+{
+    return this->precacheDirs;
+}
+
+void GoogleDrive::setPrecacheDirs(bool precache)
+{
+    this->precacheDirs = precache;
 }
 
 void GoogleDrive::uploadFileContents(QIODevice *fileArg, QString path, QString fileId,QString url)
@@ -553,11 +565,13 @@ void GoogleDrive::queueOp(QUrl url, QVariantMap headers, QByteArray data, Google
 void GoogleDrive::operationTimerFired()
 {
     if (this->queuedOps.isEmpty()) {
-        D("Operation queue empty.");
         this->operationTimer.setInterval(REQUEST_TIMER_TICK_MSEC);
         this->operationTimer.stop();
+        D(QString("Operation queue empty, operation timer set to %1 msec.").arg(operationTimer.interval()));
     } else {
-        D("Current state: "<<this->state);
+        D(QString("Current state: %1 - Operation timer at %2 msec.")
+          .arg(_connectionStateString(this->state))
+          .arg(operationTimer.interval()));
         if (this->state == Connected) {
             quint64 interval = this->operationTimer.interval() * 2;
             this->operationTimer.setInterval( (interval>REQUEST_TIMER_TICK_MSEC_MAX) ? REQUEST_TIMER_TICK_MSEC_MAX : interval );
@@ -645,7 +659,7 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
                 op->handler(response,false); // Call the response with no data to prevent locks
                 delete op;
             } else {
-                this->queuedOps.append(op);
+                this->queuedOps.prepend(op);
                 int factor = msec;
                 for(int x=0;x<op->retryCount;x++) {
                     msec *= factor;

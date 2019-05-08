@@ -262,19 +262,23 @@ GoogleDriveObject::GoogleDriveObject(GoogleDriveObject *parentObject,GoogleDrive
     this->metadataTimer.setInterval(3000);
     D("New google object: "<<*this);
 
-    QTimer::singleShot(100,[=](){
-        if (this->isFolder()) {
-            this->getChildren();
-        }
-    });
+    if (this->gofish->getPrecacheDirs()) {
+        QTimer::singleShot(500,[=](){
+            if (this->isFolder()) {
+                this->getChildren();
+            }
+        });
+    }
 }
 
 GoogleDriveObject::~GoogleDriveObject()
 {
+    D("Deleting object...");
     if (this->temporaryFile!=nullptr) {
         delete this->temporaryFile;
     }
     clearChildren();
+    D("Object deleted.");
 }
 
 bool GoogleDriveObject::isFolder() const

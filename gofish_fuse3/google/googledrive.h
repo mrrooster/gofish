@@ -12,6 +12,7 @@ class QNetworkReply;
 class GoogleDriveObject;
 
 #define GOOGLE_FOLDER "application/vnd.google-apps.folder"
+#define _connectionStateString(s) (s==GoogleDrive::Disconnected?"Disconnected":s==GoogleDrive::Connecting?"Connecting":s==GoogleDrive::Connected?"Connected":s==GoogleDrive::ConnectionFailed?"Connection failed":"Unknown")
 
 class GoogleDrive : public QObject
 {
@@ -33,6 +34,8 @@ public:
     void rename(QString fileId,QString oldParentId,QString newParentId,QString newName,QString removeId);
     void updateMetadata(GoogleDriveObject *obj);
     QString getTempDir();
+    bool getPrecacheDirs();
+    void setPrecacheDirs(bool precache);
 
 signals:
     void stateChanged(ConnectionState newState);
@@ -65,6 +68,7 @@ private:
     QVector<QString> pregeneratedIds;
     bool readOnly;
     QString tempDir;
+    bool precacheDirs;
 
     QMap<QNetworkReply*,GoogleDriveOperation*> inprogressOps;
 

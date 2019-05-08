@@ -14,6 +14,9 @@
 #include <QDir>
 
 void messageOutput(QtMsgType type, const QMessageLogContext &context, const QString &msg);
+QString byteCountString(qint64 bytes);
+QString byteCountString(QString bytes);
+qint64 stringToNumber(QString string);
 
 qint64 g_startTime;
 bool g_debug = false;
@@ -36,19 +39,23 @@ int main(int argc, char *argv[])
     QSettings settings;
     settings.beginGroup("googledrive");
     QString currentTemp = settings.value("temp_dir",QDir::tempPath()).toString();
+    QString currentDownloadSize = settings.value("download_chunk_bytes",READ_CHUNK_SIZE).toString();
+    QString currentCacheSize = settings.value("in_memory_cache_bytes",DEFAULT_CACHE_SIZE).toString();
+    QString currentRefreshSecs = settings.value("refresh_seconds",DEFAULT_REFRESH_SECS).toString();
 
     QCommandLineOption clientIdOpt("id","Set the google client ID, you must do this at least once.","Google client ID");
     QCommandLineOption clientSecretOpt("secret","Set the google client secret, you must do this at least once.","Google client secret");
-    QCommandLineOption refreshSecondsOpt("refresh-secs","Set the number of seconds between refreshes, the longer this value is the better performance will be, however remote changes may not become visible.","Seconds");
-    QCommandLineOption cacheSizeOpt("cache-bytes","Set the size of the in memory block cache in bytes. More memory good.","Bytes");
-    QCommandLineOption dloadOpt("download-size","How much data to download in each request, this should be roughly a quater of your total download speed.","Bytes");
+    QCommandLineOption refreshSecondsOpt("refresh-secs",QString("Set the number of seconds between directory information refreshes, the longer this value is the better performance will be, however remote changes may not become visible. IF you use the precache-dirs option then setting this optiont too low will result in constant traffic to google, which is not desirable. Currently: %1 seconds").arg(currentRefreshSecs),"Seconds");
+    QCommandLineOption cacheSizeOpt("cache-bytes",QString("Set the size of the in memory block cache in bytes. Genearlly more memory is good. Currently: %1 bytes (%2)").arg(currentCacheSize).arg(byteCountString(currentCacheSize)),"Bytes");
+    QCommandLineOption dloadOpt("download-size",QString("How much data to download in each request, this should be roughly a quater of your total download speed. Currently: %1 bytes (%2)").arg(currentDownloadSize).arg(byteCountString(currentDownloadSize)),"Bytes");
+    QCommandLineOption precacheOpt("precache-dirs","Causes gofish to fetch the enitre directory tree, minimises the initial pause when accessing a directory at the expense of some initial bandwith usage.");
     QCommandLineOption foregroundOpt(QStringList({"f","foreground"}),"Run in the foreground");
     QCommandLineOption optionsOpt(QStringList({"o","options"}),"mount options for fuse, eg: ro,allow_other","Options");
     QCommandLineOption debugOpt(QStringList({"d","debug"}),"Turn on debugging output, implies -f");
-    QCommandLineOption tmpOpt(QStringList({"t","temp-dir"}),QString("Sets the location uploaded files are saved to before they are sent to Google, if you do a lot of upload this folder should be large enough to hold the uploaded files. Current value: '%1'").arg(currentTemp),"temp dire");
+    QCommandLineOption tmpOpt(QStringList({"t","temp-dir"}),QString("Sets the location uploaded files are saved to before they are sent to Google, if you do a lot of upload this folder should be large enough to hold the uploaded files. Currently: '%1'").arg(currentTemp),"temp dire");
     QCommandLineOption helpOpt(QStringList({"h","help"}),"Help. Show this help.");
 
-    parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive. The refresh-secs, cache-bytes, id, secret and download-bytes options are saved to the settings file, and therefore only need to be specified once.");
+    parser.setApplicationDescription("Gofish is a fuse filesystem for read only access to a google drive. The refresh-secs, cache-bytes, id, secret and download-bytes options are saved to the settings file, and therefore only need to be specified once.\n\nOptions that take a byte value can use a k,m or g suffix for KiB,MiB and GiB respectivly.");
     //parser.addHelpOption();
     parser.addOption(helpOpt);
     parser.addVersionOption();
@@ -61,6 +68,7 @@ int main(int argc, char *argv[])
     parser.addOption(dloadOpt);
     parser.addOption(tmpOpt);
     parser.addOption(refreshSecondsOpt);
+    parser.addOption(precacheOpt);
     parser.addPositionalArgument("mountpoint","The mountpoint to use");
 
     QStringList args;
@@ -68,23 +76,25 @@ int main(int argc, char *argv[])
         args.append(argv[x]);
     }
     parser.process(args);
+    bool precacheDirs=parser.isSet(precacheOpt);
+
 
     if (!parser.value(clientIdOpt).isEmpty()) {
         settings.setValue("client_id",parser.value(clientIdOpt));
         settings.setValue("client_secret",parser.value(clientSecretOpt));
     }
     if (!parser.value(refreshSecondsOpt).isNull()) {
-        settings.setValue("refresh_seconds",parser.value(refreshSecondsOpt));
+        settings.setValue("refresh_seconds",stringToNumber(parser.value(refreshSecondsOpt)));
     }
     if (!parser.value(cacheSizeOpt).isNull()) {
-        settings.setValue("in_memory_cache_bytes",parser.value(cacheSizeOpt));
+        settings.setValue("in_memory_cache_bytes",stringToNumber(parser.value(cacheSizeOpt)));
     }
     if (!parser.value(dloadOpt).isNull()) {
-        settings.setValue("download_chunk_bytes",parser.value(dloadOpt));
+        settings.setValue("download_chunk_bytes",stringToNumber(parser.value(dloadOpt)));
     }
     if (!parser.value(tmpOpt).isNull()) {
         settings.setValue("temp_dir",parser.value(tmpOpt));
-    }
+    }  
     if (parser.isSet(debugOpt)) {
         g_debug = true;
     }
@@ -135,12 +145,14 @@ and 'secret' options.";
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {
             if (!fuse) {
-                fuse = new FuseHandler(fuse_argc,fuse_argv,&googledrive);
+                fuse = new FuseHandler(fuse_argc,fuse_argv,&googledrive,settings.value("refresh_seconds",DEFAULT_REFRESH_SECS).toLongLong());
             }
         } else if (state==GoogleDrive::ConnectionFailed) {
             QCoreApplication::exit(-1);
         }
     });
+
+    googledrive.setPrecacheDirs(precacheDirs);
 
     return a.exec();
 }
@@ -187,4 +199,29 @@ QString byteCountString(qint64 bytes)
     }
 
     return QString("%0 %1").arg(bytes).arg(suffix);
+}
+
+QString byteCountString(QString bytes)
+{
+    return byteCountString(bytes.toLongLong());
+}
+
+qint64 stringToNumber(QString string) {
+    qint64 ret=0;
+    if (!string.isEmpty()) {
+        QString suffix = string.right(1).toLower();
+        if (QString("kmgt").contains(suffix)) {
+            ret = string.left(string.length()-1).toLongLong() * 1024; // k
+            if (suffix=="m") {
+                ret *= 1024;
+            } else if (suffix=="g") {
+                ret *= 1024 * 1024;
+            } else if (suffix=="t") {
+                ret *= 1024 * 1024 * 1024;
+            }
+        } else {
+            ret = string.toLongLong();
+        }
+    }
+    return ret;
 }
