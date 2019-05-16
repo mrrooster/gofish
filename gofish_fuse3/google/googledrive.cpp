@@ -386,25 +386,28 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     query += "&fields=nextPageToken,files(name,size,mimeType,id,kind,createdTime,modifiedTime,capabilities(canDownload,canEdit,canAddChildren,canListChildren),appProperties(uid,gid,fileMode))&pageSize=1000";
     url.setQuery(query);
     queueOp(url,QVariantMap(),[=](QNetworkReply *response,bool found){
-       // D("readFolder-FIN: startPath:"<<startPath<<", parentId: "<<parentId<<", Next page token:"<<nextPageToken);
+        D("readFolder-FIN: startPath:"<<startPath<<", parentId: "<<parentId<<", Next page token:"<<nextPageToken);
         QByteArray responseData = response->readAll();
-        //D("Read file response data:"<<responseData);
+//        D("Read file response data:"<<responseData);
+        D("Got response data");
         if (responseData.isEmpty()||!found) {
             D("Error'd/empty response.");
             return;
         }
 //        D("Got response data:"+responseData);
         QJsonDocument doc = QJsonDocument::fromJson(responseData);
-//        D("Got response:"<<doc);
+        D("Got response:"<<doc);
 
         if (doc.isObject()) {
+            D("2");
             if (doc["files"].isArray()) {
                 QVector<QString> nameList;
-
+D("3");
                 for(auto it = this->inflightValues.value(startPath)->begin(),end = this->inflightValues.value(startPath)->end(); it!=end; it++) {
                     QVariantMap file = (*it);
                     nameList.append(file["name"].toString());
                 }
+                D("4");
                 auto files = doc["files"].toArray();
 
                 for(int idx=0;idx<files.size();idx++) {
@@ -444,7 +447,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                     QVector<GoogleDriveObject*> newChildren;
                     for(auto it = this->inflightValues.value(startPath)->begin(),end = this->inflightValues.value(startPath)->end(); it!=end; it++) {
                         QVariantMap file = (*it);
-        //                D("File: "<<file);
+                        D("File: "<<file);
 
                         GoogleDriveObject *newObj = new GoogleDriveObject(
                                     nullptr,
@@ -467,7 +470,11 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
                     }
                     emit remoteFolder(startPath,newChildren);
 
-                    delete this->inflightValues.take(startPath);
+                    D("Before delete...");
+                    if (this->inflightValues.contains(startPath)) {
+                        D("Doing delete");
+                        delete this->inflightValues.take(startPath);
+                    }
                     return;
                 }
             }
@@ -584,8 +591,8 @@ void GoogleDrive::operationTimerFired()
         if (!this->objectsToScan.isEmpty()) {
             this->objectsToScan.takeFirst()->getChildren();
         } else {
-            D(QString("Operation queue empty, operation timer set to %1 msec.").arg(operationTimer.interval()));
             this->operationTimer.setInterval(REQUEST_TIMER_TICK_MSEC);
+            D(QString("Operation queue empty, operation timer set to %1 msec.").arg(operationTimer.interval()));
         }
     } else {
         D(QString("Current state: %1 - Operation timer at %2 msec.")
@@ -697,9 +704,12 @@ void GoogleDrive::requestFinished(QNetworkReply *response)
 qint64 GoogleDrive::getInodeForFileId(QString id)
 {
     if (!this->inodeMap.contains(id)) {
+        D("Creating new inode for ID:"<<id);
         this->inodeMap.insert(id,this->inode++);
     }
-    return this->inodeMap.value(id);
+    auto ret = this->inodeMap.value(id);
+    D("Got inode "<<ret<<" for id:"<<id);
+    return ret;
 }
 
 QString GoogleDrive::getRefreshToken()
