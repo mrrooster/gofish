@@ -52,7 +52,9 @@ FuseHandler::FuseHandler(int argc, char *argv[], GoogleDrive *gofish, qint64 ref
     this->timeOutTimer.start(OP_TIMEOUT_MSEC);
     connect(&this->refreshTimer,&QTimer::timeout,this,[=](){
         D("Refreshing root folder.");
-        this->initRoot();
+        if (this->root) {
+            this->root->refresh();
+        }
     });
     this->refreshTimer.setSingleShot(false);
     this->refreshTimer.start(refreshSecs * 1000);
@@ -111,7 +113,7 @@ void FuseHandler::initFuse(int argc, char *argv[])
 
 void FuseHandler::addObjectForInode(GoogleDriveObject *obj)
 {
-    connect(obj,&GoogleDriveObject::destroyed,[=](){
+    connect(obj,&QObject::destroyed,[=](){
         if (this->inodeToDir.value(obj->getInode())==obj) {
             D("Deleting object with inode: "<<obj->getInode()<<obj);
             this->inodeToDir.remove(obj->getInode());
@@ -363,15 +365,14 @@ void FuseHandler::readDir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off
 
 void FuseHandler::getAttr(fuse_req_t req, fuse_ino_t ino, fuse_file_info *)
 {
-    D("getAttr, Inode:"<<ino);
-
     GoogleDriveObject *item = this->inodeToDir.value(ino);
     if (!item) {
-        D("Returning ENOENT, for inode:"<<ino);
+        D("Getattr: Returning ENOENT, for inode:"<<ino);
         fuse_reply_err(req, ENOENT);
         return;
     }
 
+    D("getAttr, Inode:"<<ino<<", file:"<<item->getPath());
     struct stat stbuf;
     setupStat(item,&stbuf);
     fuse_reply_attr(req,&stbuf,DEFAULT_REFRESH_SECS);
