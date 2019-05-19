@@ -298,6 +298,13 @@ void GoogleDrive::addObjectToScan(GoogleDriveObject *obj)
     }
 }
 
+void GoogleDrive::addObjectsToScan(QVector<GoogleDriveObject *> objects)
+{
+    for(auto object:objects) {
+        addObjectToScan(object);
+    }
+}
+
 void GoogleDrive::uploadFileContents(QIODevice *fileArg, QString path, QString fileId,QString url)
 {
     QVariantMap headers;
@@ -589,7 +596,11 @@ void GoogleDrive::operationTimerFired()
     if (this->queuedOps.isEmpty()) {
         this->operationTimer.stop();
         if (!this->objectsToScan.isEmpty()) {
-            this->objectsToScan.takeFirst()->getChildren();
+            auto objectToScan = this->objectsToScan.takeFirst();
+            objectToScan->refresh();
+            if (getPrecacheDirs()) {
+                objectToScan->getChildren();
+            }
         } else {
             this->operationTimer.setInterval(REQUEST_TIMER_TICK_MSEC);
             D(QString("Operation queue empty, operation timer set to %1 msec.").arg(operationTimer.interval()));

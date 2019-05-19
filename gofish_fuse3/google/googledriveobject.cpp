@@ -269,12 +269,10 @@ GoogleDriveObject::GoogleDriveObject(GoogleDriveObject *parentObject,GoogleDrive
 
 GoogleDriveObject::~GoogleDriveObject()
 {
-    D("Deleting object...");
     if (this->temporaryFile!=nullptr) {
         delete this->temporaryFile;
     }
     clearChildren();
-    D("Object deleted.");
 }
 
 bool GoogleDriveObject::isFolder() const
@@ -394,19 +392,43 @@ qint64 GoogleDriveObject::getChildren()
 
 void GoogleDriveObject::setChildren(QVector<GoogleDriveObject *> newChildren)
 {
-    this->childFolderCount = 0;
-    D("In setchildren");
-    clearChildren(newChildren);
-    for(auto it = newChildren.begin(),end = newChildren.end();it!=end;it++) {
-        if ((*it)->isFolder()) {
-            this->childFolderCount+=1;
-        }
-        (*it)->parentObject = this;
-        (*it)->usageCount++;
+    QMap<qint64,GoogleDriveObject*> finalObjects;
+    QVector<GoogleDriveObject*> objectsToRefresh;
+
+    D("In setchildren, with "<<newChildren.size()<<"entries.");
+    for(auto child : newChildren) {
+        finalObjects.insert(child->getInode(),child);
     }
-    this->contents = newChildren;
+    for(auto child : this->contents) {
+        if (finalObjects.contains(child->getInode())) {
+            GoogleDriveObject *newChild = finalObjects.take(child->getInode());
+            child->updateUsing(newChild);
+            newChild->decreaseUsageCount();
+            finalObjects.insert(child->getInode(),child);
+            objectsToRefresh.append(child);
+        } else {
+            D("Release stale item:"<<child->getPath()<<child->id);
+            child->decreaseUsageCount();
+        }
+    }
+    D("Final object count: "<<finalObjects.size());
+
+    this->childFolderCount = 0;
+    this->contents.clear();
+
+    for(auto child : finalObjects.values()) {
+        if (child->isFolder()) {
+            this->childFolderCount++;
+        }
+        child->parentObject = this;
+        child->usageCount++;
+        this->contents.append(child);
+    }
+
     D("Set children, "<<this->childFolderCount<<"folders:"<<getPath()<<this->contents.size());
     this->populated = true;
+    D("Refreshing "<<objectsToRefresh.size()<<" child objects.");
+    this->gofish->addObjectsToScan(objectsToRefresh);
 }
 
 GoogleDriveObject *GoogleDriveObject::create(QString name)
@@ -683,6 +705,13 @@ QString GoogleDriveObject::mimetypeFromName(QString name)
     return mimeType;
 }
 
+void GoogleDriveObject::refresh()
+{
+    if (isFolder()) {
+        this->populated = false; // Will cause next 'getChildren' to update dir from google.
+    }
+}
+
 void GoogleDriveObject::clearChildren(QVector<GoogleDriveObject*> except)
 {
     this->childFolderCount = 0;
@@ -690,7 +719,7 @@ void GoogleDriveObject::clearChildren(QVector<GoogleDriveObject*> except)
     this->contents.clear();
     for(auto it = oldContents.begin(),end = oldContents.end();it!=end;it++) {
         if (!except.contains((*it))) {
-            (*it)->deleteLater();
+            (*it)->decreaseUsageCount();
         }
     }
 }
@@ -809,11 +838,11 @@ void GoogleDriveObject::decreaseUsageCount()
 {
     this->usageCount--;
     if (this->usageCount<=0) {
+        D("Deleting object:"<<this->instanceId<<", usage count:"<<this->usageCount);
         if (this->parentObject) {
-            D("Deleting object:"<<this->instanceId);
             this->parentObject->contents.removeOne(this);
-            this->deleteLater();
         }
+        this->deleteLater();
     }
 }
 
@@ -844,6 +873,10 @@ void GoogleDriveObject::processPendingSegment(QString fileId, qint64 start, qint
     }
     D("Process pending segment:"<<fileId<<start<<length);
     QByteArray receivedData = this->gofish->getPendingSegment(fileId,start,length);
+    if (!this->pendingSegments.contains(QPair<qint64,qint64>(start,length))) {
+        D("Warning: Got unexpected pending segment. id:"<<fileId<<", start:"<<start<<", len:"<<length);
+        return;
+    }
     QPair<qint64,ReadData> dataPair = this->pendingSegments.take(QPair<qint64,qint64>(start,length));
     ReadData myData = dataPair.second;
     qint64 key = dataPair.first;
@@ -930,6 +963,19 @@ void GoogleDriveObject::processDirCreated(QString path, QString fileId)
         this->id = fileId;
         emit this->getParentObject()->createDirResponse(this->closeToken,this);
     }
+}
+
+void GoogleDriveObject::updateUsing(GoogleDriveObject *other)
+{
+    this->mimeType = other->mimeType;
+    this->size = other->size;
+    this->path = other->path;
+    this->name = other->name;
+    this->ctime = other->ctime;
+    this->mtime = other->mtime;
+    this->fileMode = other->fileMode;
+    this->uid = other->uid;
+    this->gid = other->gid;
 }
 
 QDebug operator<<(QDebug debug, const GoogleDriveObject &o)

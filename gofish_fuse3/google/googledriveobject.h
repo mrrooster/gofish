@@ -60,6 +60,7 @@ public:
     void setGid(gid_t gid);
     void stopMetadataUpdate();
     QString mimetypeFromName(QString name);
+    void refresh();
     static QMap<QString,QString> typeMap;
 
 //    void operator =(const GoogleDriveObject &other);
@@ -131,6 +132,7 @@ private slots:
     void processUploadInProgress(QString path);
     void processUploadComplete(QString path,QString fileId);
     void processDirCreated(QString path,QString fileId);
+    void updateUsing(GoogleDriveObject *other);
 };
 
 QDebug operator<<(QDebug debug, const GoogleDriveObject &o);
