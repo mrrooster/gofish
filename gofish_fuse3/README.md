@@ -8,10 +8,6 @@ If gofish is mounted rw it will enable write support. This is currently quite ne
 
 Currently files are written to google once they are closed. Permissions and uid/gids are also written if set. Deleting remote files caused them to be 'trashed'.
 
-### Issues
-
-Because of the way gofish refreshes directory info new files may dissapear from directory listings if they're still uploading over a refresh. They'll come back eventually.
-
 ### Temporary files
 
 By default files are staged locally in the default system temp folder, this can be overridden with the -t option (eg if you have /tmp memory backed and are uploading large files). The -t option persists.

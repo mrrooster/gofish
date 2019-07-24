@@ -397,6 +397,7 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
         QByteArray responseData = response->readAll();
 //        D("Read file response data:"<<responseData);
         D("Got response data");
+        this->inflightPaths.removeAll(startPath);
         if (responseData.isEmpty()||!found) {
             D("Error'd/empty response.");
             return;
@@ -450,7 +451,6 @@ D("3");
                     this->inflightValues.value(startPath)->append(fileInfo);
                 }
                 if (!doc["nextPageToken"].isString()) {
-                    this->inflightPaths.removeAll(startPath);
                     QVector<GoogleDriveObject*> newChildren;
                     for(auto it = this->inflightValues.value(startPath)->begin(),end = this->inflightValues.value(startPath)->end(); it!=end; it++) {
                         QVariantMap file = (*it);
@@ -483,6 +483,8 @@ D("3");
                         delete this->inflightValues.take(startPath);
                     }
                     return;
+                } else {
+                    this->inflightPaths.append(startPath);
                 }
             }
             if (doc["nextPageToken"].isString()) {
