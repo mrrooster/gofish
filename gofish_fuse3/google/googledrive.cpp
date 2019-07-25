@@ -649,6 +649,13 @@ void GoogleDrive::operationTimerFired()
                         this->bytesRead += total;
                     }
                 });
+                connect(response,&QObject::destroyed,[=](){
+                    if (this->inprogressOps.contains(response)) {
+                        auto op = this->inprogressOps.take(response);
+                        op->handler(response,true);
+                        delete op;
+                     }
+                });
                 this->inprogressOps.insert(response,op);
             }
         } else if (this->state==Disconnected) {
@@ -746,7 +753,7 @@ void GoogleDrive::authenticate()
     QString clientSecret = settings.value("client_secret").toString();
 
     if (this->auth) {
-        QTimer::singleShot(600000,this->auth,&QObject::deleteLater);
+        this->auth->deleteLater();
     }
     setState(Connecting);
     this->auth    = new GOAuth2AuthorizationCodeFlow(new GoogleNetworkAccessManager(this), this);
