@@ -1,4 +1,4 @@
-#include "googledrive.h"
+ #include "googledrive.h"
 #include <QtNetworkAuth>
 #include <QSettings>
 #include <QJsonDocument>
@@ -82,22 +82,22 @@ GoogleDrive::~GoogleDrive()
 void GoogleDrive::readRemoteFolder(QString path, QString parentId)
 {
     D("read remote folder."<<path);
-    if (this->inflightPaths.contains(path)) {
-        D("Another request in progress.");
-    }
+    //if (this->inflightPaths.contains(path)) {
+      //  D("Another request in progress.");
+    //}
     if (this->inflightValues.contains(path)) {
         this->inflightValues.value(path)->clear();
     } else {
         this->inflightValues.insert(path,new QVector<QVariantMap>());
     }
-    this->inflightPaths.append(path);
+    //this->inflightPaths.append(path);
     readFolder(path,"",parentId);
 }
 
-bool GoogleDrive::pathInFlight(QString path)
-{
-    return this->inflightPaths.contains(path);
-}
+//bool GoogleDrive::pathInFlight(QString path)
+//{
+//    return this->inflightPaths.contains(path);
+//}
 
 QByteArray GoogleDrive::getPendingSegment(QString fileId, qint64 start, qint64 length)
 {
@@ -114,7 +114,7 @@ void GoogleDrive::getFileContents(QString fileId, qint64 start, qint64 length)
     D("read remote file."<<id);
 
 
-    this->inflightPaths.append(id);
+    //this->inflightPaths.append(id);
     D("read remote file.. locked."<<id);
     //readFolder(path,path,"","");
     readFileSection(fileId,start,length);
@@ -393,11 +393,11 @@ void GoogleDrive::readFolder(QString startPath, QString nextPageToken, QString p
     query += "&fields=nextPageToken,files(name,size,mimeType,id,kind,createdTime,modifiedTime,capabilities(canDownload,canEdit,canAddChildren,canListChildren),appProperties(uid,gid,fileMode))&pageSize=1000";
     url.setQuery(query);
     queueOp(url,QVariantMap(),[=](QNetworkReply *response,bool found){
+        //this->inflightPaths.removeAll(startPath);
         D("readFolder-FIN: startPath:"<<startPath<<", parentId: "<<parentId<<", Next page token:"<<nextPageToken);
         QByteArray responseData = response->readAll();
 //        D("Read file response data:"<<responseData);
         D("Got response data");
-        this->inflightPaths.removeAll(startPath);
         if (responseData.isEmpty()||!found) {
             D("Error'd/empty response.");
             return;
@@ -484,7 +484,7 @@ D("3");
                     }
                     return;
                 } else {
-                    this->inflightPaths.append(startPath);
+                    //this->inflightPaths.append(startPath);
                 }
             }
             if (doc["nextPageToken"].isString()) {
@@ -511,7 +511,7 @@ void GoogleDrive::readFileSection(QString fileId, qint64 start, qint64 length)
         QByteArray responseData = response->readAll();
         this->pendingSegments.insert(id,responseData);
         D("Got file section response, size:"<<responseData.size());
-        this->inflightPaths.removeOne(id);
+        //this->inflightPaths.removeOne(id);
         this->fuseRead+=responseData.size();
         emit pendingSegment(fileId,start,length);
     });
@@ -588,7 +588,9 @@ void GoogleDrive::queueOp(QUrl url, QVariantMap headers, QByteArray data, Google
     if (this->queuedOps.size()>this->maxQueuedRequests) {
         this->maxQueuedRequests = this->queuedOps.size();
     }
+    D("Op queued.");
     if (!this->operationTimer.isActive()) {
+        D("Timer started.");
         this->operationTimer.start();
     }
 }
@@ -598,11 +600,14 @@ void GoogleDrive::operationTimerFired()
     if (this->queuedOps.isEmpty()) {
         this->operationTimer.stop();
         if (!this->objectsToScan.isEmpty()) {
+            D("Objects to scan.");
             auto objectToScan = this->objectsToScan.takeFirst();
             objectToScan->refresh();
             if (getPrecacheDirs()) {
                 objectToScan->getChildren();
             }
+            D("Timer started after objects to scan.");
+            this->operationTimer.start();
         } else {
             this->operationTimer.setInterval(REQUEST_TIMER_TICK_MSEC);
             D(QString("Operation queue empty, operation timer set to %1 msec.").arg(operationTimer.interval()));
@@ -668,7 +673,9 @@ void GoogleDrive::operationTimerFired()
                 interval = REQUEST_TIMER_MAX_MSEC;
             }
             this->operationTimer.setInterval(interval);
+            D("Set interval to :"<<interval);
         }
+        D("Start op timer");
         this->operationTimer.start();
     }
 }

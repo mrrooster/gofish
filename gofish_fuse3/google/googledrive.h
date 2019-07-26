@@ -23,7 +23,7 @@ public:
     explicit GoogleDrive(bool readOnly, QString tempDir, QObject *parent = nullptr);
     ~GoogleDrive();
 
-    bool pathInFlight(QString path);
+    //bool pathInFlight(QString path);
     QByteArray getPendingSegment(QString fileId, qint64 start, qint64 length);
     qint64 getInodeForFileId(QString id);
     void readRemoteFolder(QString path, QString parentId);
@@ -65,7 +65,7 @@ private:
     QMap<QString,QVector<QVariantMap>*> inflightValues;
     QMap<QString,QByteArray> pendingSegments;
     QMap<QString,qint64> inodeMap;
-    QVector<QString> inflightPaths;
+   // QVector<QString> inflightPaths;
     QVector<GoogleDriveOperation*> queuedOps;
     QVector<QString> pregeneratedIds;
     QVector<GoogleDriveObject*> objectsToScan;
