@@ -38,6 +38,7 @@ public:
     void setPrecacheDirs(bool precache);
     void addObjectToScan(GoogleDriveObject *obj);
     void addObjectsToScan(QVector<GoogleDriveObject*> objects);
+    void start();
 
 signals:
     void stateChanged(ConnectionState newState);

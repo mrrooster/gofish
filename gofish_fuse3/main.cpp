@@ -142,15 +142,25 @@ and 'secret' options.";
 
     GoogleDrive googledrive(readOnly,settings.value("temp_dir",QDir::tempPath()).toString());
     FuseHandler *fuse=nullptr;
+    int retrycount=0;
     QObject::connect(&googledrive,&GoogleDrive::stateChanged,[&](GoogleDrive::ConnectionState state){
         if (state==GoogleDrive::Connected) {
             if (!fuse) {
                 fuse = new FuseHandler(fuse_argc,fuse_argv,&googledrive,settings.value("refresh_seconds",DEFAULT_REFRESH_SECS).toLongLong());
             }
-        } else if (state==GoogleDrive::ConnectionFailed) {
-            QCoreApplication::exit(-1);
+        } else if (state==GoogleDrive::ConnectionFailed && fuse==nullptr) {
+            retrycount++;
+            if (retrycount<10) {
+                QTimer::singleShot(765*retrycount,[&]{
+                    googledrive.start();
+                });
+            } else {
+                QCoreApplication::exit(-1);
+            }
         }
     });
+
+    googledrive.start();
 
     googledrive.setPrecacheDirs(precacheDirs);
 

@@ -44,7 +44,7 @@ GoogleDrive::GoogleDrive(bool readOnly, QString tempDir, QObject *parent) : QObj
     this->fuseWritten = 0;
     this->requestCount = 0;
     this->maxQueuedRequests = 0;
-    authenticate();
+    //authenticate();
 
     connect(&this->statsTimer,&QTimer::timeout,this,[=](){
         D("------------------------------------------------");
@@ -303,6 +303,22 @@ void GoogleDrive::addObjectsToScan(QVector<GoogleDriveObject *> objects)
     for(auto object:objects) {
         addObjectToScan(object);
     }
+}
+
+void GoogleDrive::start()
+{
+    if (this->state==Disconnected || this->state==ConnectionFailed) {
+        D("Start calling authenticate...");
+        authenticate();
+        QTimer::singleShot(10000,[&](){
+            D("State at check:"<<this->state);
+            if (this->state==Connecting) {
+                D("Connection failed.");
+                this->setState(ConnectionFailed);
+            }
+        });
+    }
+
 }
 
 void GoogleDrive::uploadFileContents(QIODevice *fileArg, QString path, QString fileId,QString url)
@@ -788,7 +804,8 @@ void GoogleDrive::authenticate()
     });
 
     connect(this->auth,&QOAuth2AuthorizationCodeFlow::finished,[=](QNetworkReply *reply){
-        if (this->state == Connecting && reply->isFinished() && reply->error()==QNetworkReply::ContentAccessDenied) {
+        if (this->state == Connecting && reply->isFinished() && reply->error()!=QNetworkReply::NoError) {
+            D("Connection failed.");
             this->setState(ConnectionFailed);
         }
     });
