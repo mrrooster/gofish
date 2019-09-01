@@ -18,6 +18,17 @@ By default files are staged locally in the default system temp folder, this can 
 
 Gofish requires libfuse3. You should probably go and get that first. ;)
 
+#### Ubuntu 19.04
+
+To build on Ubuntu 19.04:
+
+```
+$ sudo apt install git libqt5core5a libqt5networkauth5-dev libfuse3-dev
+$ git clone https://github.com/mrrooster/gofish.git
+$ cd gofish/gofish_fuse3/
+$ /usr/lib/qt5/bin/qmake && make -j4
+```
+
 ### First run
 
 gofish requires a goodle API ID and secret before it is allowed to connect to your google drive. These are used to identify an application to google. You can use the same api key for many instances of gofish, as the first run process ties it to a particular user. So you can easly generate an API key for your entire organisation.
