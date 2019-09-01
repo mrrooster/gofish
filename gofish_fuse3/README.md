@@ -42,7 +42,7 @@ If you want write support the application needs to be given **./auth/drive** sco
 Once you have a google client ID and client secret you can run gofish for the first time like this:
 
 ```
-./gofish --id <client id> --secret <client secret> <mountpoint>
+sudo ./gofish --id <client id> --secret <client secret> <mountpoint>
 ```
 
 The first time you run it you will be given a URL to visit. You should ideally visit this using a browser on the machine you're running gofish from, as the URL has a callback that tells gofish it's authorised.
