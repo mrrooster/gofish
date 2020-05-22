@@ -310,7 +310,7 @@ void GoogleDrive::start()
     if (this->state==Disconnected || this->state==ConnectionFailed) {
         D("Start calling authenticate...");
         authenticate();
-        QTimer::singleShot(10000,[&](){
+        QTimer::singleShot(100000,[&](){
             D("State at check:"<<this->state);
             if (this->state==Connecting) {
                 D("Connection failed.");
